@@ -1,0 +1,2 @@
+import type { Participant } from "@/types/room";
+export function ParticipantsPanel({ participants }: { participants: Participant[] }) { return <section className="panel-card participant-list"><div className="panel-heading"><strong>Participants</strong><span>{participants.length}</span></div>{participants.map((p) => <div className="participant-row" key={p.id}><span>{p.name}</span><div>{p.local ? <b>You</b> : null}{p.role !== "audience" ? <b>{p.role}</b> : null}{p.muted ? <b>Muted</b> : null}</div></div>)}</section>; }

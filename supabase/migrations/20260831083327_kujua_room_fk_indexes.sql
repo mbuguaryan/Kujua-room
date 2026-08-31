@@ -1,0 +1,13 @@
+create index if not exists audit_log_actor_user_idx on public.audit_log(actor_user_id);
+create index if not exists media_participants_user_idx on public.media_participants(user_id);
+create index if not exists moderation_events_actor_user_idx on public.moderation_events(actor_user_id);
+create index if not exists moderation_events_target_user_idx on public.moderation_events(target_user_id);
+create index if not exists private_notes_user_idx on public.private_notes(user_id);
+create index if not exists room_invites_created_by_idx on public.room_invites(created_by);
+create index if not exists room_members_invited_by_idx on public.room_members(invited_by);
+create index if not exists rooms_created_by_idx on public.rooms(created_by);
+create index if not exists session_notes_updated_by_idx on public.session_notes(updated_by);
+create index if not exists session_participants_room_idx on public.session_participants(room_id);
+create index if not exists sessions_created_by_idx on public.sessions(created_by);
+create index if not exists stage_requests_resolved_by_idx on public.stage_requests(resolved_by);
+create index if not exists stage_requests_user_idx on public.stage_requests(user_id);;

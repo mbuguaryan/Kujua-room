@@ -1,0 +1,1 @@
+export function Brand({ compact = false }: { compact?: boolean }) { return <div className={compact ? "brand compact" : "brand"}><div className="brand-mark">K</div><div><strong>Kujua Room</strong>{compact ? null : <span>Voice coaching</span>}</div></div>; }
