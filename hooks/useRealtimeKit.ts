@@ -52,6 +52,8 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
   const connect = useCallback(
     async (authToken: string, deviceId?: string) => {
       try {
+        if (!authToken || typeof authToken !== "string")
+          throw new Error("RealtimeKit auth token was not returned by the server");
         if (authToken.startsWith("mock.")) {
           setParticipants([
             {
