@@ -8,8 +8,16 @@ type ApiEnvelope<T> = {
   data?: T;
   errors?: Array<{ message: string }>;
 };
+
+type RealtimeKitParticipant = {
+  id: string;
+  token: string;
+  preset_name?: string;
+};
+
 export class RealtimeKitApi {
   private env = serverEnv();
+
   private base() {
     const {
       CLOUDFLARE_ACCOUNT_ID: a,
@@ -23,6 +31,7 @@ export class RealtimeKitApi {
       token,
     };
   }
+
   private async request<T>(path: string, init: RequestInit) {
     const { url, token } = this.base();
     const response = await fetch(url + path, {
@@ -34,15 +43,25 @@ export class RealtimeKitApi {
       },
       cache: "no-store",
     });
-    const body = (await response.json()) as ApiEnvelope<T>;
+
+    let body: ApiEnvelope<T> | undefined;
+    try {
+      body = (await response.json()) as ApiEnvelope<T>;
+    } catch {
+      throw new Error(`RealtimeKit request failed (${response.status}): invalid response`);
+    }
+
     if (!response.ok || !body.success)
       throw new Error(
         `RealtimeKit request failed (${response.status}): ${body.errors?.[0]?.message ?? "unknown"}`,
       );
+
     const value = body.result ?? body.data;
-    if (!value) throw new Error("RealtimeKit returned no data");
+    if (value === undefined || value === null)
+      throw new Error("RealtimeKit returned no data");
     return value;
   }
+
   preset(role: RoomRole) {
     return {
       host: this.env.CLOUDFLARE_RTK_HOST_PRESET,
@@ -51,37 +70,70 @@ export class RealtimeKitApi {
       audience: this.env.CLOUDFLARE_RTK_AUDIENCE_PRESET,
     }[role];
   }
+
+  private async resolvePreset(role: RoomRole) {
+    const configured = this.preset(role);
+    const presets = await this.request<Array<{ name?: string }>>("/presets?per_page=100", {
+      method: "GET",
+    });
+    const names = presets.map((item) => item.name).filter((name): name is string => Boolean(name));
+
+    if (names.includes(configured)) return configured;
+
+    const patterns: Record<RoomRole, RegExp[]> = {
+      host: [/group[_-]?call[_-]?host/i, /webinar[_-]?host/i, /host/i, /admin/i, /presenter/i],
+      moderator: [/moderator/i, /group[_-]?call[_-]?host/i, /webinar[_-]?host/i, /host/i, /presenter/i],
+      speaker: [/speaker/i, /presenter/i, /group[_-]?call[_-]?host/i, /host/i],
+      audience: [/audience/i, /group[_-]?call[_-]?participant/i, /webinar[_-]?participant/i, /participant/i, /viewer/i],
+    };
+
+    for (const pattern of patterns[role]) {
+      const match = names.find((name) => pattern.test(name));
+      if (match) return match;
+    }
+
+    throw new Error(
+      `No RealtimeKit preset is available for role ${role}. Configured preset: ${configured}. Available presets: ${names.join(", ") || "none"}`,
+    );
+  }
+
   createMeeting(title: string) {
     return this.request<{ id: string }>("/meetings", {
       method: "POST",
       body: JSON.stringify({ title }),
     });
   }
-  addParticipant(
+
+  async addParticipant(
     meetingId: string,
     input: { userId: string; name: string; role: RoomRole },
   ) {
-    return this.request<{ id: string; token: string }>(
+    const presetName = await this.resolvePreset(input.role);
+    return this.request<RealtimeKitParticipant>(
       `/meetings/${meetingId}/participants`,
       {
         method: "POST",
         body: JSON.stringify({
           custom_participant_id: input.userId,
           name: input.name,
-          preset_name: this.preset(input.role),
+          preset_name: presetName,
         }),
       },
     );
   }
+
   updateParticipant(meetingId: string, participantId: string, role: RoomRole) {
-    return this.request<unknown>(
-      `/meetings/${meetingId}/participants/${participantId}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ preset_name: this.preset(role) }),
-      },
+    return this.resolvePreset(role).then((presetName) =>
+      this.request<unknown>(
+        `/meetings/${meetingId}/participants/${participantId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ preset_name: presetName }),
+        },
+      ),
     );
   }
+
   removeParticipant(meetingId: string, participantId: string) {
     return this.request<unknown>(
       `/meetings/${meetingId}/participants/${participantId}`,
