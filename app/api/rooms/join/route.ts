@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { joinRoomSchema } from "@/lib/validation/schemas";
 import { apiError } from "@/lib/security/http";
 import { rateLimit } from "@/lib/security/rate-limit";
+import { mediaAdapter } from "@/lib/media";
+import { audit } from "@/lib/room/audit";
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   try {
@@ -44,12 +46,65 @@ export async function POST(request: NextRequest) {
       await admin
         .from("profiles")
         .upsert({ user_id: user.id, display_name: body.displayName });
-      const { data: session } = await admin
+
+      let { data: session } = await admin
         .from("sessions")
         .select("id,status")
         .eq("room_id", room.id)
         .eq("status", "live")
         .maybeSingle();
+
+      // The host entering the room is the authoritative signal that the
+      // conference should be live. Previously the join flow only looked for
+      // an already-live session, so a brand-new room could never get past the
+      // join screen and surfaced "No live session right now." Create the
+      // provider meeting and live session here when none exists.
+      if (!session) {
+        const now = new Date().toISOString();
+        const meeting = await mediaAdapter().createMeeting(room.name);
+        const { data: created, error: createError } = await admin
+          .from("sessions")
+          .insert({
+            room_id: room.id,
+            title: room.name,
+            agenda: null,
+            status: "live",
+            created_by: user.id,
+            created_at: now,
+            started_at: now,
+            media_provider: "cloudflare-realtimekit",
+            provider_meeting_id: meeting.meetingId,
+            media_created_at: now,
+          })
+          .select("id,status")
+          .single();
+
+        if (createError?.code === "23505") {
+          const { data: existing } = await admin
+            .from("sessions")
+            .select("id,status")
+            .eq("room_id", room.id)
+            .eq("status", "live")
+            .maybeSingle();
+          session = existing;
+        } else if (createError) {
+          throw createError;
+        } else {
+          session = created;
+          if (session) {
+            await audit(admin, {
+              actor_user_id: user.id,
+              target_user_id: null,
+              room_id: room.id,
+              session_id: session.id,
+              action: "session_started",
+              metadata: { source: "host_join" },
+              created_at: now,
+            });
+          }
+        }
+      }
+
       return NextResponse.json({
         data: {
           room_id: room.id,
