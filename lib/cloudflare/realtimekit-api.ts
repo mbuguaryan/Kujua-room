@@ -13,6 +13,14 @@ type RealtimeKitParticipant = {
   id: string;
   token: string;
   preset_name?: string;
+  custom_participant_id?: string;
+};
+
+type RealtimeKitParticipantSummary = {
+  id: string;
+  custom_participant_id: string;
+  preset_name?: string;
+  name?: string;
 };
 
 export class RealtimeKitApi {
@@ -104,11 +112,34 @@ export class RealtimeKitApi {
     });
   }
 
+  private async findParticipant(meetingId: string, userId: string) {
+    const participants = await this.request<RealtimeKitParticipantSummary[]>(
+      `/meetings/${meetingId}/participants?per_page=100`,
+      { method: "GET" },
+    );
+    return participants.find((p) => p.custom_participant_id === userId);
+  }
+
   async addParticipant(
     meetingId: string,
     input: { userId: string; name: string; role: RoomRole },
   ) {
     const presetName = await this.resolvePreset(input.role);
+
+    const existing = await this.findParticipant(meetingId, input.userId);
+    if (existing) {
+      return this.request<RealtimeKitParticipant>(
+        `/meetings/${meetingId}/participants/${existing.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: input.name,
+            preset_name: presetName,
+          }),
+        },
+      );
+    }
+
     return this.request<RealtimeKitParticipant>(
       `/meetings/${meetingId}/participants`,
       {
