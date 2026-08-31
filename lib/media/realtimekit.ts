@@ -15,7 +15,7 @@ export class RealtimeKitAdapter implements MediaAdminAdapter {
       authToken: p.token,
       meetingId: input.meetingId,
       participantId: p.id,
-      presetName: this.api.preset(input.role),
+      presetName: p.preset_name ?? this.api.preset(input.role),
     };
   }
   async updateParticipantRole(
