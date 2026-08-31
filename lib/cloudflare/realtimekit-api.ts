@@ -128,7 +128,7 @@ export class RealtimeKitApi {
 
     const existing = await this.findParticipant(meetingId, input.userId);
     if (existing) {
-      return this.request<RealtimeKitParticipant>(
+      await this.request<RealtimeKitParticipantSummary>(
         `/meetings/${meetingId}/participants/${existing.id}`,
         {
           method: "PATCH",
@@ -138,9 +138,21 @@ export class RealtimeKitApi {
           }),
         },
       );
+      const refreshed = await this.request<{ token: string }>(
+        `/meetings/${meetingId}/participants/${existing.id}/token`,
+        { method: "POST" },
+      );
+      if (!refreshed.token)
+        throw new Error("RealtimeKit returned an empty participant token");
+      return {
+        id: existing.id,
+        token: refreshed.token,
+        preset_name: presetName,
+        custom_participant_id: input.userId,
+      } satisfies RealtimeKitParticipant;
     }
 
-    return this.request<RealtimeKitParticipant>(
+    const participant = await this.request<RealtimeKitParticipant>(
       `/meetings/${meetingId}/participants`,
       {
         method: "POST",
@@ -151,6 +163,9 @@ export class RealtimeKitApi {
         }),
       },
     );
+    if (!participant.token)
+      throw new Error("RealtimeKit returned an empty participant token");
+    return participant;
   }
 
   updateParticipant(meetingId: string, participantId: string, role: RoomRole) {
