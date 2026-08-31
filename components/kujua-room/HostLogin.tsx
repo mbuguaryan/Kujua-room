@@ -17,7 +17,10 @@ export function HostLogin() {
       }),
     });
     if (!response.ok) {
-      setError("Unable to sign in. Check your credentials and try again.");
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      setError(body?.error ?? "Unable to sign in. Please try again.");
       setLoading(false);
       return;
     }
