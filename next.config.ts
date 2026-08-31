@@ -10,7 +10,7 @@ const csp = [
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  `script-src 'self'${isProduction ? "" : " 'unsafe-eval'"}`,
+  `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.cloudflare.com https: wss:",
   "media-src 'self' blob:",
   "worker-src 'self' blob:",

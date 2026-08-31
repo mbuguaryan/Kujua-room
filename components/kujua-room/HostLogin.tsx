@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 export function HostLogin() {
   const router = useRouter();
@@ -26,9 +26,16 @@ export function HostLogin() {
     }
     router.push("/r/mens-conference?host=1");
   }
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submit(new FormData(event.currentTarget));
+  }
   return (
     <main className="join-screen">
-      <form className="join-card" action={(data) => void submit(data)}>
+      <form
+        className="join-card"
+        onSubmit={(event) => void handleSubmit(event)}
+      >
         <div className="brand-center">
           <div className="brand-mark">K</div>
         </div>
@@ -56,7 +63,7 @@ export function HostLogin() {
           autoComplete="current-password"
           required
         />
-        <button className="btn primary spaced" disabled={loading}>
+        <button type="submit" className="btn primary spaced" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </button>
         {error ? (
