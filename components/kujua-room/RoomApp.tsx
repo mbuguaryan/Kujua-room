@@ -8,7 +8,9 @@ import { RoomScreen } from "./RoomScreen";
 
 const labels: Record<JoinState, string> = { idle: "", "validating-invite": "Validating invitation…", authenticating: "Creating your secure identity…", "requesting-microphone": "Preparing your microphone…", "testing-microphone": "Testing your microphone…", "joining-room": "Joining Men’s Conference…", "requesting-media-token": "Securing live audio…", "connecting-media": "Connecting securely…", connected: "Connected", reconnecting: "Connection interrupted. Reconnecting…", failed: "Unable to join the room.", ended: "This session has ended." };
 
-export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = "" }: { slug: string; inviteToken: string; hostEntry?: boolean; initialName?: string }) {
+type HostAccess = "public" | "private";
+
+export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = "", hostAccess = "private" }: { slug: string; inviteToken: string; hostEntry?: boolean; initialName?: string; hostAccess?: HostAccess }) {
   const [state, setState] = useState<JoinState>("idle");
   const [error, setError] = useState("");
   const [bootstrap, setBootstrap] = useState<RoomBootstrap>();
@@ -30,10 +32,11 @@ export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = ""
     const displayName = rawName.replace(/\s*\*host\*\s*$/iu, "").trim();
     try {
       setError(""); setState("authenticating");
-      const response = await fetch("/api/rooms/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, inviteToken: inviteToken || undefined, displayName, requestHost: requestedHost || hostEntry }) });
+      const requestHost = requestedHost || hostEntry;
+      const response = await fetch("/api/rooms/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, inviteToken: inviteToken || undefined, displayName, requestHost, accessMode: requestHost ? hostAccess : undefined }) });
       const body = await response.json() as { data?: { session_id?: string; role?: string }; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error ?? "Unable to join the room.");
-      if ((requestedHost || hostEntry) && body.data.role !== "host") throw new Error("Host authorization required. Sign in through the host login page.");
+      if (requestHost && body.data.role !== "host") throw new Error("Host authorization required. Sign in through the host login page.");
       if (!body.data.session_id) throw new Error("No live session right now.");
       setState("joining-room");
       const bootResponse = await fetch(`/api/sessions/${body.data.session_id}`);
