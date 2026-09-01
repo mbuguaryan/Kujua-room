@@ -12,9 +12,16 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
 
   const sync = useCallback(() => {
     if (!meeting) return;
-    const remote = Array.from(meeting.participants.joined.values()).map(
-      (p) => ({
-        id: p.customParticipantId ?? p.id,
+
+    const localId = meeting.self.customParticipantId || meeting.self.id;
+    const uniqueRemote = new Map<string, Participant>();
+
+    for (const p of meeting.participants.joined.values()) {
+      const stableId = p.customParticipantId ?? p.id;
+      if (stableId === localId || p.id === meeting.self.id) continue;
+
+      const candidate: Participant = {
+        id: stableId,
         providerPeerId: p.id,
         name: p.name,
         role: roleFromPreset(p.presetName),
@@ -24,11 +31,17 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
         muted: !p.audioEnabled,
         handRaised: p.stageStatus === "REQUESTED_TO_JOIN_STAGE",
         speaking: meeting.participants.lastActiveSpeaker === p.id,
-      }),
-    );
+      };
+
+      const existing = uniqueRemote.get(stableId);
+      if (!existing || candidate.speaking || (!candidate.muted && existing.muted)) {
+        uniqueRemote.set(stableId, candidate);
+      }
+    }
+
     setParticipants([
       {
-        id: meeting.self.customParticipantId || meeting.self.id,
+        id: localId,
         name: localName,
         role,
         currentRole: role,
@@ -39,7 +52,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
         speaking: meeting.participants.lastActiveSpeaker === meeting.self.id,
         local: true,
       },
-      ...remote,
+      ...uniqueRemote.values(),
     ]);
   }, [localName, meeting, role]);
 
