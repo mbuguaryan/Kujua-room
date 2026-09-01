@@ -54,11 +54,6 @@ export async function POST(request: NextRequest) {
         .eq("status", "live")
         .maybeSingle();
 
-      // The host entering the room is the authoritative signal that the
-      // conference should be live. Previously the join flow only looked for
-      // an already-live session, so a brand-new room could never get past the
-      // join screen and surfaced "No live session right now." Create the
-      // provider meeting and live session here when none exists.
       if (!session) {
         const now = new Date().toISOString();
         const meeting = await mediaAdapter().createMeeting(room.name);
@@ -133,11 +128,20 @@ export async function POST(request: NextRequest) {
       p_invite_token: body.inviteToken!,
       p_display_name: body.displayName,
     });
-    if (error)
+    if (error) {
+      console.error(JSON.stringify({
+        level: "error",
+        event: "invite_redemption_failed",
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      }));
       return NextResponse.json(
         { error: "This invitation is invalid or unavailable." },
         { status: 403 },
       );
+    }
     const membership = data?.[0];
     if (!membership)
       return NextResponse.json(
