@@ -397,6 +397,15 @@ export type Database = {
           },
         ];
       };
+      room_messages: {
+        Row: { id: string; session_id: string; room_id: string; sender_id: string; recipient_id: string | null; message: string; message_type: string; created_at: string };
+        Insert: { id?: string; session_id: string; room_id: string; sender_id: string; recipient_id?: string | null; message: string; message_type?: string; created_at?: string };
+        Update: { id?: string; session_id?: string; room_id?: string; sender_id?: string; recipient_id?: string | null; message?: string; message_type?: string; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "room_messages_session_id_fkey"; columns: ["session_id"]; isOneToOne: false; referencedRelation: "sessions"; referencedColumns: ["id"] },
+          { foreignKeyName: "room_messages_room_id_fkey"; columns: ["room_id"]; isOneToOne: false; referencedRelation: "rooms"; referencedColumns: ["id"] },
+        ];
+      };
       rooms: {
         Row: {
           access_mode: string;

@@ -1,2 +1,2 @@
-import { redirect } from "next/navigation";
-export default function Home() { redirect("/r/mens-conference"); }
+import { Suspense } from "react"; import { HomeEntry } from "@/components/kujua-room/HomeEntry";
+export default function Home(){return <Suspense><HomeEntry/></Suspense>}
