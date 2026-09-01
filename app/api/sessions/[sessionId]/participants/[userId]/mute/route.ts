@@ -24,10 +24,7 @@ export async function POST(
       metadata: {},
       created_at: new Date().toISOString(),
     });
-    return NextResponse.json(
-      { ok: true, providerAction: "client_mute_event_required" },
-      { status: 202 },
-    );
+    return NextResponse.json({ ok: true, providerAction: "client_disable_audio", targetUserId: userId, allowSelfUnmute: true });
   } catch (error) {
     return apiError(error, "participant_mute_failed");
   }

@@ -15,6 +15,7 @@ import { usePrivateNotes } from "@/hooks/usePrivateNotes";
 import { useKujuaRealtimeKit } from "@/hooks/useRealtimeKit";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { clearRecoveryState, newClientInstanceId, readRecoveryState, saveRecoveryState } from "@/lib/room/recovery";
 
 export function RoomScreen({
   bootstrap,
@@ -37,6 +38,8 @@ export function RoomScreen({
   const [stageBusyId, setStageBusyId] = useState<string>();
   const [inviteBusy, setInviteBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [moderationBusy, setModerationBusy] = useState<string>();
+  const [stageRevision, setStageRevision] = useState(0);
 
   const media = useKujuaRealtimeKit(
     bootstrap.member.role,
@@ -55,18 +58,29 @@ export function RoomScreen({
     bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
 
   useEffect(() => {
-    void fetch(`/api/sessions/${bootstrap.session.id}/join`, { method: "POST" })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("join failed");
-        return fetch(`/api/sessions/${bootstrap.session.id}/media-token`, {
-          method: "POST",
-        });
-      })
-      .then((r) => r.json())
-      .then((token: { authToken: string }) =>
-        connectMedia(token.authToken, deviceId),
-      );
-  }, [bootstrap.session.id, connectMedia, deviceId]);
+    let cancelled = false;
+    const connect = async () => {
+      const prior = readRecoveryState(bootstrap.room.slug);
+      const clientInstanceId = prior?.clientInstanceId ?? newClientInstanceId();
+      saveRecoveryState({ roomSlug: bootstrap.room.slug, sessionId: bootstrap.session.id, clientInstanceId });
+      for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
+        try {
+          const joined = await fetch(`/api/sessions/${bootstrap.session.id}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientInstanceId }) });
+          if (!joined.ok) throw new Error("join failed");
+          const response = await fetch(`/api/sessions/${bootstrap.session.id}/media-token`, { method: "POST" });
+          if (!response.ok) throw new Error("media token failed");
+          const token = await response.json() as { authToken: string };
+          await connectMedia(token.authToken, deviceId, Boolean(bootstrap.recovered));
+          return;
+        } catch (cause) {
+          if (attempt === 2) { console.error("Room media recovery failed", cause); return; }
+          await new Promise((resolve) => window.setTimeout(resolve, 500 * (2 ** attempt)));
+        }
+      }
+    };
+    void connect();
+    return () => { cancelled = true; };
+  }, [bootstrap.recovered, bootstrap.room.slug, bootstrap.session.id, connectMedia, deviceId]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -101,11 +115,24 @@ export function RoomScreen({
           });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "stage_requests", filter: `session_id=eq.${bootstrap.session.id}` },
+        () => setStageRevision((value) => value + 1),
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "session_participants", filter: `session_id=eq.${bootstrap.session.id}` },
+        ({ new: value }) => {
+          const row = value as Record<string, unknown>;
+          if (row.user_id === bootstrap.member.userId && typeof row.current_role === "string") setEffectiveRole(row.current_role as RoomRole);
+        },
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [bootstrap.session.id]);
+  }, [bootstrap.member.userId, bootstrap.session.id]);
 
   useEffect(() => {
     let stopped = false;
@@ -152,6 +179,7 @@ export function RoomScreen({
     canModerate,
     effectiveRole,
     joinApprovedStage,
+    stageRevision,
   ]);
 
   const leave = useCallback(async () => {
@@ -160,8 +188,42 @@ export function RoomScreen({
       method: "POST",
       keepalive: true,
     });
+    clearRecoveryState();
     router.push(`/r/${bootstrap.room.slug}`);
   }, [bootstrap.room.slug, bootstrap.session.id, media, router]);
+
+  const muteParticipant = useCallback(async (userId: string) => {
+    setModerationBusy(userId);
+    try {
+      const response = await fetch(`/api/sessions/${bootstrap.session.id}/participants/${userId}/mute`, { method: "POST" });
+      if (!response.ok) throw new Error("Mute authorization failed.");
+      await media.muteParticipant(userId);
+      setNotice("Participant muted. They may unmute if still allowed to speak.");
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Unable to mute participant."); }
+    finally { setModerationBusy(undefined); }
+  }, [bootstrap.session.id, media]);
+
+  const revokeSpeaker = useCallback(async (userId: string) => {
+    setModerationBusy(userId);
+    try {
+      await denyStageAccess(userId);
+      const response = await fetch(`/api/sessions/${bootstrap.session.id}/participants/${userId}/role`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "audience", permanent: false }) });
+      if (!response.ok) throw new Error("Unable to revoke speaking permission.");
+      setNotice("Speaking permission revoked.");
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Unable to revoke speaking permission."); }
+    finally { setModerationBusy(undefined); }
+  }, [bootstrap.session.id, denyStageAccess]);
+
+  const muteAll = useCallback(async () => {
+    setModerationBusy("all");
+    try {
+      const response = await fetch(`/api/sessions/${bootstrap.session.id}/participants/mute-all`, { method: "POST" });
+      if (!response.ok) throw new Error("Mute-all authorization failed.");
+      await media.muteAll();
+      setNotice("All participants muted. Approved speakers may unmute themselves.");
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Unable to mute participants."); }
+    finally { setModerationBusy(undefined); }
+  }, [bootstrap.session.id, media]);
 
   const toggleHand = useCallback(async () => {
     if (handBusy) return;
@@ -327,6 +389,7 @@ export function RoomScreen({
               ? "Connected"
               : (media.error ?? "Connecting securely…")}
           </small>
+          <small className="connection-detail">{{ connecting: "Connecting", connected: "Connected", reconnecting: "Reconnecting", "connection-lost": "Connection lost", failed: "Unable to connect" }[media.connectionState]}</small>
         </div>
         <nav>
           <button
@@ -377,7 +440,7 @@ export function RoomScreen({
         />
       ) : null}
       {panel === "participants" ? (
-        <ParticipantsPanel participants={media.participants} />
+        <ParticipantsPanel participants={media.participants} canModerate={canModerate} busyUserId={moderationBusy} onMute={(id) => void muteParticipant(id)} onRevoke={(id) => void revokeSpeaker(id)} />
       ) : null}
       {panel === "notes" ? <SessionNotesPanel notes={notes} /> : null}
       {panel === "private" ? (
@@ -394,6 +457,7 @@ export function RoomScreen({
       </section>
 
       <footer className="controls">
+        {canModerate ? <button className="control" disabled={Boolean(moderationBusy)} onClick={() => void muteAll()}>Mute All</button> : null}
         {effectiveRole !== "audience" ? (
           <button
             className="control"
@@ -439,7 +503,7 @@ export function RoomScreen({
                   { method: "POST" },
                 );
                 const body = (await response.json()) as { endsAt?: string };
-                if (body.endsAt) setEndsAt(body.endsAt);
+                if (body.endsAt) { clearRecoveryState(); setEndsAt(body.endsAt); }
               }
             }}
           >
