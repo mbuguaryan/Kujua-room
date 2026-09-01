@@ -660,6 +660,15 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      consume_rate_limit_server: {
+        Args: {
+          p_bucket: string;
+          p_limit: number;
+          p_rate_key: string;
+          p_window_seconds: number;
+        };
+        Returns: boolean;
+      };
       create_room_invite: {
         Args: {
           p_expires_at?: string;

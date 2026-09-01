@@ -13,7 +13,13 @@ export async function POST(
     const { user, member, session, admin } = await sessionAuthority(sessionId);
     if (session.status !== "live" || !session.provider_meeting_id)
       throw new HttpError(409, "The session is not live.");
-    await rateLimit("media-token", `${user.id}:${sessionId}`, 10, 60);
+    await rateLimit(
+      "media-token",
+      `${user.id}:${sessionId}`,
+      10,
+      60,
+      admin,
+    );
     const { data: attendance } = await admin
       .from("session_participants")
       .select("current_role")
