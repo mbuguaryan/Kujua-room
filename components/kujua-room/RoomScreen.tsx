@@ -59,6 +59,12 @@ export function RoomScreen({
     bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
 
   useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(""), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
+
+  useEffect(() => {
     let cancelled = false;
     const connect = async () => {
       const prior = readRecoveryState(bootstrap.room.slug);
@@ -518,7 +524,12 @@ export function RoomScreen({
       </footer>
 
       {notice ? (
-        <div className="toast visible" role="status" onClick={() => setNotice("")}>
+        <div
+          className="toast visible"
+          role="status"
+          style={{ bottom: "96px", zIndex: 50 }}
+          onClick={() => setNotice("")}
+        >
           {notice}
         </div>
       ) : null}
