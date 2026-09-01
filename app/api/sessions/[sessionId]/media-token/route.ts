@@ -27,6 +27,9 @@ export async function POST(
       .eq("user_id", user.id)
       .maybeSingle();
     const role = attendance?.current_role ?? member.role;
+    // Keep the application role as audience, but issue an audio-capable media
+    // preset so every participant can mute/unmute themselves like Google Meet.
+    const mediaRole = role === "audience" ? "speaker" : role;
     const { data: profile } = await admin
       .from("profiles")
       .select("display_name")
@@ -36,7 +39,7 @@ export async function POST(
       meetingId: session.provider_meeting_id,
       userId: user.id,
       name: profile?.display_name ?? "Participant",
-      role,
+      role: mediaRole,
     });
     await admin.from("media_participants").upsert(
       {
