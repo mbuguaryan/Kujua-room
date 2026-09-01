@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Participant, RoomMessage } from "@/types/room";
 import { createClient } from "@/lib/supabase/client";
 
@@ -18,6 +18,9 @@ export function ChatPanel({
   const [recipient, setRecipient] = useState("");
   const [mode, setMode] = useState<"room" | "direct">("room");
   const [busy, setBusy] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const directParticipants = useMemo(() => {
     const seen = new Set<string>();
@@ -65,6 +68,10 @@ export function ChatPanel({
     );
   }, [messages, mode, recipient, userId]);
 
+  useEffect(() => {
+    if (!minimized) messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [visible.length, minimized, mode, recipient]);
+
   async function send() {
     const message = text.trim();
     if (!message || busy) return;
@@ -93,14 +100,49 @@ export function ChatPanel({
     }
   }
 
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        className="chat-minimized"
+        aria-label="Open live chat"
+        onClick={() => setMinimized(false)}
+      >
+        <span className="chat-minimized-dot" />
+        <strong>Live chat</strong>
+        <span>{visible.length}</span>
+      </button>
+    );
+  }
+
   return (
-    <aside className="chat-drawer" aria-label="Live class chat">
-      <div className="chat-drawer-head">
-        <div>
-          <span>Live chat</span>
-          <strong>{mode === "room" ? "Everyone" : "Private message"}</strong>
+    <aside
+      className={`chat-drawer${expanded ? " expanded" : ""}`}
+      aria-label="Live class chat"
+    >
+      <div className="chat-drawer-head youtube-like">
+        <div className="chat-title-block">
+          <strong>Live chat</strong>
+          <span>{mode === "room" ? `${visible.length} messages` : "Private conversation"}</span>
         </div>
-        <span className="chat-live-dot">Live</span>
+        <div className="chat-window-actions">
+          <button
+            type="button"
+            aria-label={expanded ? "Restore chat size" : "Expand chat"}
+            title={expanded ? "Restore" : "Expand"}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "↙" : "↗"}
+          </button>
+          <button
+            type="button"
+            aria-label="Minimize chat"
+            title="Minimize"
+            onClick={() => setMinimized(true)}
+          >
+            —
+          </button>
+        </div>
       </div>
 
       <div className="chat-tabs" role="tablist" aria-label="Chat mode">
@@ -125,7 +167,7 @@ export function ChatPanel({
 
       {mode === "direct" ? (
         <label className="chat-recipient">
-          <span>Message</span>
+          <span>To</span>
           <select value={recipient} onChange={(event) => setRecipient(event.target.value)}>
             <option value="">Choose a participant</option>
             {directParticipants.map((participant) => (
@@ -153,16 +195,17 @@ export function ChatPanel({
           ))
         ) : (
           <div className="chat-empty">
-            <strong>{mode === "room" ? "Start the conversation" : "No private messages yet"}</strong>
+            <strong>{mode === "room" ? "No messages yet" : "No private messages yet"}</strong>
             <span>
               {mode === "room"
-                ? "Messages here are visible to everyone in the room."
+                ? "Messages from everyone in the room will appear here."
                 : recipient
                   ? "Only you and this participant can read these messages."
                   : "Choose a participant to start a private conversation."}
             </span>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="chat-compose">
@@ -170,7 +213,7 @@ export function ChatPanel({
           className="form-input"
           value={text}
           maxLength={2000}
-          placeholder={mode === "room" ? "Message everyone…" : "Write a private message…"}
+          placeholder={mode === "room" ? "Say something…" : "Write a private message…"}
           disabled={mode === "direct" && !recipient}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
