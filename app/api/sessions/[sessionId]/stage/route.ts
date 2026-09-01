@@ -168,6 +168,7 @@ export async function POST(
           roomId: privileged.session.room_id,
           meetingId: privileged.session.provider_meeting_id,
           nextRole: "speaker",
+          syncProviderRole: false,
         });
       } catch (promotionError) {
         await privileged.admin
@@ -197,7 +198,7 @@ export async function POST(
       });
     }
 
-    return NextResponse.json({ ok: true, status });
+    return NextResponse.json({ ok: true, status, userId: stage.user_id });
   } catch (error) {
     return apiError(error, "stage_request_failed");
   }
