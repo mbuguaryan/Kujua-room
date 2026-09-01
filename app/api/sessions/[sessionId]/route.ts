@@ -39,6 +39,8 @@ export async function GET(
         .single(),
     ]);
     if (!room) throw new Error("Room unavailable");
+    const storedRole = attendance?.current_role ?? member.role;
+    const clientRole = storedRole === "audience" ? "speaker" : storedRole;
     return NextResponse.json({
       room: {
         id: room.id,
@@ -55,7 +57,7 @@ export async function GET(
       },
       member: {
         userId: user.id,
-        role: attendance?.current_role ?? member.role,
+        role: clientRole,
         displayName: profile?.display_name ?? "Participant",
       },
       notes: {
