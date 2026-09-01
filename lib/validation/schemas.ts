@@ -12,14 +12,13 @@ export const inviteTokenSchema = z
   .max(256)
   .regex(/^[A-Za-z0-9_-]+$/);
 export const roleSchema = z.enum(["host", "moderator", "speaker", "audience"]);
-export const joinRoomSchema = z
-  .object({
-    slug: roomSlugSchema,
-    inviteToken: inviteTokenSchema.optional(),
-    displayName: displayNameSchema,
-    requestHost: z.boolean().default(false),
-  })
-  ;
+export const joinRoomSchema = z.object({
+  slug: roomSlugSchema,
+  inviteToken: inviteTokenSchema.optional(),
+  displayName: displayNameSchema,
+  requestHost: z.boolean().default(false),
+  accessMode: z.enum(["public", "private"]).optional(),
+});
 export const sessionIdSchema = z.object({ sessionId: uuidSchema });
 export const notesSchema = z.object({
   title: z.string().trim().min(1).max(160),
