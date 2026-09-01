@@ -1,12 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
-import type { Participant, RoomRole } from "@/types/room";
+import type { ConnectionState, Participant, RoomRole } from "@/types/room";
 
 export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
   const [meeting, initMeeting] = useRealtimeKitClient();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [connected, setConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
   const [error, setError] = useState<string>();
 
   const sync = useCallback(() => {
@@ -14,8 +15,12 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     const remote = Array.from(meeting.participants.joined.values()).map(
       (p) => ({
         id: p.customParticipantId ?? p.id,
+        providerPeerId: p.id,
         name: p.name,
         role: roleFromPreset(p.presetName),
+        currentRole: roleFromPreset(p.presetName),
+        canUnmute: roleFromPreset(p.presetName) !== "audience",
+        hostMuted: false,
         muted: !p.audioEnabled,
         handRaised: p.stageStatus === "REQUESTED_TO_JOIN_STAGE",
         speaking: meeting.participants.lastActiveSpeaker === p.id,
@@ -26,6 +31,9 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
         id: meeting.self.customParticipantId || meeting.self.id,
         name: localName,
         role,
+        currentRole: role,
+        canUnmute: role !== "audience",
+        hostMuted: false,
         muted: !meeting.self.audioEnabled,
         handRaised: meeting.self.stageStatus === "REQUESTED_TO_JOIN_STAGE",
         speaking: meeting.participants.lastActiveSpeaker === meeting.self.id,
@@ -147,8 +155,10 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
   }, [meeting]);
 
   const connect = useCallback(
-    async (authToken: string, deviceId?: string) => {
+    async (authToken: string, deviceId?: string, startMuted = false) => {
       try {
+        setConnectionState(connected ? "reconnecting" : "connecting");
+        setError(undefined);
         if (!authToken || typeof authToken !== "string")
           throw new Error("RealtimeKit auth token was not returned by the server");
         if (authToken.startsWith("mock.")) {
@@ -157,6 +167,9 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
               id: authToken.slice(5),
               name: localName,
               role,
+              currentRole: role,
+              canUnmute: role !== "audience",
+              hostMuted: false,
               muted: role === "audience",
               handRaised: false,
               speaking: false,
@@ -164,11 +177,12 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
             },
           ]);
           setConnected(true);
+          setConnectionState("connected");
           return;
         }
         const client = await initMeeting({
           authToken,
-          defaults: { audio: role !== "audience", video: false },
+          defaults: { audio: role !== "audience" && !startMuted, video: false },
         });
         if (!client) throw new Error("Media initialization failed");
         if (deviceId) {
@@ -178,15 +192,25 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
         }
         await client.self.disableVideo();
         await client.join();
-        if (role === "audience") await client.self.disableAudio();
+        if (role === "audience" || startMuted) await client.self.disableAudio();
         setConnected(true);
+        setConnectionState("connected");
       } catch (cause) {
         console.error("RealtimeKit connection failed", cause);
         setError("Unable to connect to live audio.");
+        setConnectionState(navigator.onLine ? "failed" : "connection-lost");
       }
     },
-    [initMeeting, localName, role],
+    [connected, initMeeting, localName, role],
   );
+
+  useEffect(() => {
+    const offline = () => { setConnected(false); setConnectionState("connection-lost"); };
+    const online = () => { if (!connected) setConnectionState("reconnecting"); };
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", online);
+    return () => { window.removeEventListener("offline", offline); window.removeEventListener("online", online); };
+  }, [connected]);
 
   const toggleAudio = useCallback(async () => {
     if (!meeting) return;
@@ -227,21 +251,39 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     sync();
   }, [meeting, sync]);
 
+  const muteParticipant = useCallback(async (targetUserId: string) => {
+    if (!meeting) throw new Error("Live audio is not connected.");
+    const participant = Array.from(meeting.participants.joined.values()).find((item) => item.customParticipantId === targetUserId);
+    if (!participant) throw new Error("Participant is no longer connected.");
+    await participant.disableAudio();
+    sync();
+  }, [meeting, sync]);
+
+  const muteAll = useCallback(async () => {
+    if (!meeting) throw new Error("Live audio is not connected.");
+    await meeting.participants.disableAllAudio(true);
+    sync();
+  }, [meeting, sync]);
+
   const leave = useCallback(async () => {
     if (meeting) await meeting.leave();
     setConnected(false);
+    setConnectionState("connection-lost");
   }, [meeting]);
 
   return {
     meeting,
     participants,
     connected,
+    connectionState,
     error,
     connect,
     toggleAudio,
     grantStageAccess,
     denyStageAccess,
     joinApprovedStage,
+    muteParticipant,
+    muteAll,
     leave,
   };
 }

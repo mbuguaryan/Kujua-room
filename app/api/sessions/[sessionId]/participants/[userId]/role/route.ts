@@ -32,6 +32,9 @@ export async function PUT(
       nextRole: input.role,
       permanent: input.permanent,
     });
+    if (input.role === "audience") {
+      await admin.from("stage_requests").update({ status: "completed", resolved_at: new Date().toISOString(), resolved_by: user.id }).eq("session_id", sessionId).eq("user_id", userId).eq("status", "approved");
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return apiError(error, "participant_role_failed");
