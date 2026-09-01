@@ -8,7 +8,7 @@ import { RoomScreen } from "./RoomScreen";
 
 const labels: Record<JoinState, string> = { idle: "", "validating-invite": "Validating invitation…", authenticating: "Creating your secure identity…", "requesting-microphone": "Preparing your microphone…", "testing-microphone": "Testing your microphone…", "joining-room": "Joining Men’s Conference…", "requesting-media-token": "Securing live audio…", "connecting-media": "Connecting securely…", connected: "Connected", reconnecting: "Connection interrupted. Reconnecting…", failed: "Unable to join the room.", ended: "This session has ended." };
 
-export function RoomApp({ slug, inviteToken, hostEntry = false }: { slug: string; inviteToken: string; hostEntry?: boolean }) {
+export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = "" }: { slug: string; inviteToken: string; hostEntry?: boolean; initialName?: string }) {
   const [state, setState] = useState<JoinState>("idle");
   const [error, setError] = useState("");
   const [bootstrap, setBootstrap] = useState<RoomBootstrap>();
@@ -43,5 +43,5 @@ export function RoomApp({ slug, inviteToken, hostEntry = false }: { slug: string
   }
 
   if (bootstrap) return <RoomScreen bootstrap={bootstrap} deviceId={deviceId} />;
-  return <><JoinScreen inviteValid={Boolean(inviteToken) || hostEntry} loading={!(["idle", "failed"] as JoinState[]).includes(state)} message={labels[state]} onJoin={join} />{error ? <div className="toast visible" role="alert">{error}</div> : null}</>;
+  return <><JoinScreen inviteValid={Boolean(inviteToken) || hostEntry || Boolean(initialName)} initialName={initialName} loading={!(["idle", "failed"] as JoinState[]).includes(state)} message={labels[state]} onJoin={join} />{error ? <div className="toast visible" role="alert">{error}</div> : null}</>;
 }

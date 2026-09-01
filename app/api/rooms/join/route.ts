@@ -122,6 +122,14 @@ export async function POST(request: NextRequest) {
       10,
       300,
     );
+    if (!body.inviteToken) {
+      const { data: publicRoom } = await admin.from("rooms").select("id,name,access_mode").eq("slug", body.slug).eq("status", "active").eq("access_mode", "public").maybeSingle();
+      if (!publicRoom) return NextResponse.json({ error: "An invitation is required for this room." }, { status: 403 });
+      await admin.from("profiles").upsert({ user_id: user.id, display_name: body.displayName });
+      await admin.from("room_members").upsert({ room_id: publicRoom.id, user_id: user.id, role: "audience", status: "active" }, { onConflict: "room_id,user_id" });
+      const { data: session } = await admin.from("sessions").select("id,status").eq("room_id", publicRoom.id).eq("status", "live").maybeSingle();
+      return NextResponse.json({ data: { room_id: publicRoom.id, room_name: publicRoom.name, role: "audience", session_id: session?.id, session_status: session?.status } });
+    }
     const { data, error } = await admin.rpc("redeem_room_invite_server", {
       p_user_id: user.id,
       p_room_slug: body.slug,

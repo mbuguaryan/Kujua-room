@@ -19,10 +19,7 @@ export const joinRoomSchema = z
     displayName: displayNameSchema,
     requestHost: z.boolean().default(false),
   })
-  .refine(
-    (value) => value.requestHost || Boolean(value.inviteToken),
-    "Invitation required",
-  );
+  ;
 export const sessionIdSchema = z.object({ sessionId: uuidSchema });
 export const notesSchema = z.object({
   title: z.string().trim().min(1).max(160),
