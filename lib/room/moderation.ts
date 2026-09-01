@@ -15,6 +15,7 @@ export async function changeSessionRole(input: {
   meetingId: string | null;
   nextRole: RoomRole;
   permanent?: boolean;
+  syncProviderRole?: boolean;
 }) {
   const { data: attendance, error: attendanceError } = await input.admin
     .from("session_participants")
@@ -31,13 +32,20 @@ export async function changeSessionRole(input: {
     .eq("user_id", input.targetUserId)
     .maybeSingle();
   const providerParticipantId = media?.provider_participant_id;
-  if (providerParticipantId && input.meetingId) {
+  const shouldSyncProviderRole = input.syncProviderRole !== false;
+
+  // Temporary stage promotion is handled by RealtimeKit's live Stage API on
+  // the host client. Do not PATCH the participant preset while they are in the
+  // meeting: that is a different operation and was causing stage approval to
+  // fail with a 500. Permanent/admin role changes can still sync the preset.
+  if (shouldSyncProviderRole && providerParticipantId && input.meetingId) {
     await mediaAdapter().updateParticipantRole({
       meetingId: input.meetingId,
       participantId: providerParticipantId,
       role: input.nextRole,
     });
   }
+
   try {
     const { error } = await input.admin
       .from("session_participants")
@@ -59,7 +67,11 @@ export async function changeSessionRole(input: {
       .update({ current_role: previousRole })
       .eq("session_id", input.sessionId)
       .eq("user_id", input.targetUserId);
-    if (providerParticipantId && input.meetingId) {
+    if (
+      shouldSyncProviderRole &&
+      providerParticipantId &&
+      input.meetingId
+    ) {
       await mediaAdapter()
         .updateParticipantRole({
           meetingId: input.meetingId,
@@ -75,6 +87,7 @@ export async function changeSessionRole(input: {
   const metadata = {
     previous_role: previousRole,
     permanent: Boolean(input.permanent),
+    provider_role_synced: shouldSyncProviderRole,
   };
   const { error: eventError } = await input.admin
     .from("moderation_events")
