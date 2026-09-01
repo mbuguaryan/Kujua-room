@@ -80,7 +80,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
       if (!audio) {
         audio = document.createElement("audio");
         audio.autoplay = true;
-        audio.playsInline = true;
+        audio.setAttribute("playsinline", "");
         audio.setAttribute("data-realtimekit-participant", participant.id);
         audio.style.display = "none";
         document.body.appendChild(audio);
