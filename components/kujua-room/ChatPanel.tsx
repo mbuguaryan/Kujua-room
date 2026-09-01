@@ -1,3 +1,193 @@
 "use client";
-import { useEffect,useMemo,useState } from "react";import type { Participant,RoomMessage } from "@/types/room";import { createClient } from "@/lib/supabase/client";
-export function ChatPanel({sessionId,userId,participants}:{sessionId:string;userId:string;participants:Participant[]}){const [messages,setMessages]=useState<RoomMessage[]>([]);const [text,setText]=useState("");const [recipient,setRecipient]=useState("");const [busy,setBusy]=useState(false);useEffect(()=>{void fetch(`/api/sessions/${sessionId}/messages`).then(r=>r.json()).then((b:{messages?:RoomMessage[]})=>setMessages(b.messages??[]));const supabase=createClient();const channel=supabase.channel(`messages-${sessionId}`).on("postgres_changes",{event:"INSERT",schema:"public",table:"room_messages",filter:`session_id=eq.${sessionId}`},()=>{void fetch(`/api/sessions/${sessionId}/messages`).then(r=>r.json()).then((b:{messages?:RoomMessage[]})=>setMessages(b.messages??[]));}).subscribe();return()=>{void supabase.removeChannel(channel)}},[sessionId]);const visible=useMemo(()=>messages.filter(m=>recipient?((m.senderId===userId&&m.recipientId===recipient)||(m.senderId===recipient&&m.recipientId===userId)):m.recipientId===null),[messages,recipient,userId]);async function send(){if(!text.trim()||busy)return;setBusy(true);try{const r=await fetch(`/api/sessions/${sessionId}/messages`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipientId:recipient||null,message:text})});if(!r.ok)throw new Error("Unable to send message.");setText("");const b=await r.json() as {message:RoomMessage};setMessages(current=>current.some(m=>m.id===b.message.id)?current:[...current,b.message]);}finally{setBusy(false)}}return <section className="panel-card chat-panel"><div className="panel-heading"><strong>Chat</strong><select value={recipient} onChange={e=>setRecipient(e.target.value)}><option value="">Room chat</option>{participants.filter(p=>!p.local).map(p=><option key={p.id} value={p.id}>Direct: {p.name}</option>)}</select></div><div className="chat-messages">{visible.map(m=><p key={m.id}><b>{m.senderName}</b> {m.message}</p>)}</div><div className="chat-compose"><input className="form-input" value={text} maxLength={2000} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void send()}}/><button className="btn small primary" disabled={busy||!text.trim()} onClick={()=>void send()}>Send</button></div></section>}
+
+import { useEffect, useMemo, useState } from "react";
+import type { Participant, RoomMessage } from "@/types/room";
+import { createClient } from "@/lib/supabase/client";
+
+export function ChatPanel({
+  sessionId,
+  userId,
+  participants,
+}: {
+  sessionId: string;
+  userId: string;
+  participants: Participant[];
+}) {
+  const [messages, setMessages] = useState<RoomMessage[]>([]);
+  const [text, setText] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [mode, setMode] = useState<"room" | "direct">("room");
+  const [busy, setBusy] = useState(false);
+
+  const directParticipants = useMemo(() => {
+    const seen = new Set<string>();
+    return participants.filter((participant) => {
+      if (participant.local || participant.id === userId || seen.has(participant.id)) return false;
+      seen.add(participant.id);
+      return true;
+    });
+  }, [participants, userId]);
+
+  useEffect(() => {
+    const load = () =>
+      void fetch(`/api/sessions/${sessionId}/messages`, { cache: "no-store" })
+        .then((response) => response.json())
+        .then((body: { messages?: RoomMessage[] }) => setMessages(body.messages ?? []));
+
+    load();
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`messages-${sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "room_messages",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        load,
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [sessionId]);
+
+  const visible = useMemo(() => {
+    if (mode === "room") return messages.filter((message) => message.recipientId === null);
+    if (!recipient) return [];
+    return messages.filter(
+      (message) =>
+        (message.senderId === userId && message.recipientId === recipient) ||
+        (message.senderId === recipient && message.recipientId === userId),
+    );
+  }, [messages, mode, recipient, userId]);
+
+  async function send() {
+    const message = text.trim();
+    if (!message || busy) return;
+    if (mode === "direct" && !recipient) return;
+
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientId: mode === "direct" ? recipient : null,
+          message,
+        }),
+      });
+      if (!response.ok) throw new Error("Unable to send message.");
+      const body = (await response.json()) as { message: RoomMessage };
+      setMessages((current) =>
+        current.some((item) => item.id === body.message.id)
+          ? current
+          : [...current, body.message],
+      );
+      setText("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <aside className="chat-drawer" aria-label="Live class chat">
+      <div className="chat-drawer-head">
+        <div>
+          <span>Live chat</span>
+          <strong>{mode === "room" ? "Everyone" : "Private message"}</strong>
+        </div>
+        <span className="chat-live-dot">Live</span>
+      </div>
+
+      <div className="chat-tabs" role="tablist" aria-label="Chat mode">
+        <button
+          type="button"
+          className={mode === "room" ? "active" : ""}
+          onClick={() => {
+            setMode("room");
+            setRecipient("");
+          }}
+        >
+          Room
+        </button>
+        <button
+          type="button"
+          className={mode === "direct" ? "active" : ""}
+          onClick={() => setMode("direct")}
+        >
+          Private
+        </button>
+      </div>
+
+      {mode === "direct" ? (
+        <label className="chat-recipient">
+          <span>Message</span>
+          <select value={recipient} onChange={(event) => setRecipient(event.target.value)}>
+            <option value="">Choose a participant</option>
+            {directParticipants.map((participant) => (
+              <option key={participant.id} value={participant.id}>
+                {participant.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      <div className="chat-messages" aria-live="polite">
+        {visible.length ? (
+          visible.map((message) => (
+            <article
+              key={message.id}
+              className={message.senderId === userId ? "chat-message mine" : "chat-message"}
+            >
+              <div>
+                <strong>{message.senderId === userId ? "You" : message.senderName}</strong>
+                {message.recipientId ? <span>Private</span> : null}
+              </div>
+              <p>{message.message}</p>
+            </article>
+          ))
+        ) : (
+          <div className="chat-empty">
+            <strong>{mode === "room" ? "Start the conversation" : "No private messages yet"}</strong>
+            <span>
+              {mode === "room"
+                ? "Messages here are visible to everyone in the room."
+                : recipient
+                  ? "Only you and this participant can read these messages."
+                  : "Choose a participant to start a private conversation."}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="chat-compose">
+        <input
+          className="form-input"
+          value={text}
+          maxLength={2000}
+          placeholder={mode === "room" ? "Message everyone…" : "Write a private message…"}
+          disabled={mode === "direct" && !recipient}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void send();
+            }
+          }}
+        />
+        <button
+          className="btn small primary"
+          disabled={busy || !text.trim() || (mode === "direct" && !recipient)}
+          onClick={() => void send()}
+        >
+          {busy ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </aside>
+  );
+}
