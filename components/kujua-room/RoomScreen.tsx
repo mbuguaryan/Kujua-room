@@ -15,6 +15,7 @@ import { usePrivateNotes } from "@/hooks/usePrivateNotes";
 import { useKujuaRealtimeKit } from "@/hooks/useRealtimeKit";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { ChatPanel } from "./ChatPanel";
 import { clearRecoveryState, newClientInstanceId, readRecoveryState, saveRecoveryState } from "@/lib/room/recovery";
 
 export function RoomScreen({
@@ -25,7 +26,7 @@ export function RoomScreen({
   deviceId?: string;
 }) {
   const [panel, setPanel] = useState<
-    "participants" | "notes" | "private" | null
+    "participants" | "chat" | "notes" | "private" | null
   >(null);
   const [notes, setNotes] = useState<SessionNotes>(bootstrap.notes);
   const [endsAt, setEndsAt] = useState(bootstrap.session.endsAt);
@@ -392,6 +393,7 @@ export function RoomScreen({
           <small className="connection-detail">{{ connecting: "Connecting", connected: "Connected", reconnecting: "Reconnecting", "connection-lost": "Connection lost", failed: "Unable to connect" }[media.connectionState]}</small>
         </div>
         <nav>
+          <button aria-label="Chat" aria-expanded={panel === "chat"} className={panel === "chat" ? "active" : ""} onClick={() => setPanel(panel === "chat" ? null : "chat")}>Chat</button>
           <button
             aria-label="Participants"
             aria-expanded={panel === "participants"}
@@ -442,6 +444,7 @@ export function RoomScreen({
       {panel === "participants" ? (
         <ParticipantsPanel participants={media.participants} canModerate={canModerate} busyUserId={moderationBusy} onMute={(id) => void muteParticipant(id)} onRevoke={(id) => void revokeSpeaker(id)} />
       ) : null}
+      {panel === "chat" ? <ChatPanel sessionId={bootstrap.session.id} userId={bootstrap.member.userId} participants={media.participants} /> : null}
       {panel === "notes" ? <SessionNotesPanel notes={notes} /> : null}
       {panel === "private" ? (
         <PrivateNotesPanel
@@ -457,6 +460,8 @@ export function RoomScreen({
       </section>
 
       <footer className="controls">
+        <button className="control" onClick={() => setPanel(panel === "chat" ? null : "chat")}>Chat</button>
+        <button className="control" onClick={() => setPanel(panel === "participants" ? null : "participants")}>People</button>
         {canModerate ? <button className="control" disabled={Boolean(moderationBusy)} onClick={() => void muteAll()}>Mute All</button> : null}
         {effectiveRole !== "audience" ? (
           <button
