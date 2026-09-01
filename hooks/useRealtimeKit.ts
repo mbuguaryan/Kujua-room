@@ -17,11 +17,11 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     for (const p of meeting.participants.joined.values()) {
       const stableId = p.customParticipantId ?? p.id;
       if (stableId === localId || p.id === meeting.self.id) continue;
-      const candidate: Participant = { id: stableId, providerPeerId: p.id, name: p.name, role: roleFromPreset(p.presetName), currentRole: roleFromPreset(p.presetName), canUnmute: roleFromPreset(p.presetName) !== "audience", hostMuted: false, muted: !p.audioEnabled, handRaised: p.stageStatus === "REQUESTED_TO_JOIN_STAGE", speaking: meeting.participants.lastActiveSpeaker === p.id };
+      const candidate: Participant = { id: stableId, providerPeerId: p.id, name: p.name, role: roleFromPreset(p.presetName), currentRole: roleFromPreset(p.presetName), canUnmute: true, hostMuted: false, muted: !p.audioEnabled, handRaised: p.stageStatus === "REQUESTED_TO_JOIN_STAGE", speaking: meeting.participants.lastActiveSpeaker === p.id };
       const existing = uniqueRemote.get(stableId);
       if (!existing || candidate.speaking || (!candidate.muted && existing.muted)) uniqueRemote.set(stableId, candidate);
     }
-    setParticipants([{ id: localId, name: localName, role, currentRole: role, canUnmute: role !== "audience", hostMuted: false, muted: !meeting.self.audioEnabled, handRaised: meeting.self.stageStatus === "REQUESTED_TO_JOIN_STAGE", speaking: meeting.participants.lastActiveSpeaker === meeting.self.id, local: true }, ...uniqueRemote.values()]);
+    setParticipants([{ id: localId, name: localName, role, currentRole: role, canUnmute: true, hostMuted: false, muted: !meeting.self.audioEnabled, handRaised: meeting.self.stageStatus === "REQUESTED_TO_JOIN_STAGE", speaking: meeting.participants.lastActiveSpeaker === meeting.self.id, local: true }, ...uniqueRemote.values()]);
   }, [localName, meeting, role]);
 
   useEffect(() => {
@@ -66,11 +66,13 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     try {
       setConnectionState(connected ? "reconnecting" : "connecting"); setError(undefined);
       if (!authToken || typeof authToken !== "string") throw new Error("RealtimeKit auth token was not returned by the server");
-      if (authToken.startsWith("mock.")) { setParticipants([{ id: authToken.slice(5), name: localName, role, currentRole: role, canUnmute: role !== "audience", hostMuted: false, muted: role === "audience", handRaised: false, speaking: false, local: true }]); setConnected(true); setConnectionState("connected"); return; }
-      const client = await initMeeting({ authToken, defaults: { audio: role !== "audience" && !startMuted, video: false } });
+      if (authToken.startsWith("mock.")) { setParticipants([{ id: authToken.slice(5), name: localName, role, currentRole: role, canUnmute: true, hostMuted: false, muted: role !== "host" || startMuted, handRaised: false, speaking: false, local: true }]); setConnected(true); setConnectionState("connected"); return; }
+      const client = await initMeeting({ authToken, defaults: { audio: role === "host" && !startMuted, video: false } });
       if (!client) throw new Error("Media initialization failed");
       if (deviceId) { const devices = await client.self.getAllDevices(); const device = devices.find((item) => item.deviceId === deviceId); if (device) await client.self.setDevice(device); }
-      await client.self.disableVideo(); await client.join(); if (role === "audience" || startMuted) await client.self.disableAudio();
+      await client.self.disableVideo();
+      await client.join();
+      if (role !== "host" || startMuted) await client.self.disableAudio();
       setConnected(true); setConnectionState("connected");
     } catch (cause) { console.error("RealtimeKit connection failed", cause); setError("Unable to connect to live audio."); setConnectionState(navigator.onLine ? "failed" : "connection-lost"); }
   }, [connected, initMeeting, localName, role]);
