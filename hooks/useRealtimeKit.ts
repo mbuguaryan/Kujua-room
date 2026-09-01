@@ -195,6 +195,38 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     sync();
   }, [meeting, sync]);
 
+  const grantStageAccess = useCallback(
+    async (targetUserId: string) => {
+      if (!meeting) throw new Error("Live audio is not connected.");
+      const participant = Array.from(meeting.participants.joined.values()).find(
+        (item) => item.customParticipantId === targetUserId,
+      );
+      if (!participant)
+        throw new Error("Participant is no longer connected to the live room.");
+      await meeting.stage.grantAccess([participant.id]);
+    },
+    [meeting],
+  );
+
+  const denyStageAccess = useCallback(
+    async (targetUserId: string) => {
+      if (!meeting) return;
+      const participant = Array.from(meeting.participants.joined.values()).find(
+        (item) => item.customParticipantId === targetUserId,
+      );
+      if (!participant) return;
+      await meeting.stage.denyAccess([participant.id]);
+    },
+    [meeting],
+  );
+
+  const joinApprovedStage = useCallback(async () => {
+    if (!meeting) throw new Error("Live audio is not connected.");
+    await meeting.stage.join();
+    await meeting.self.enableAudio();
+    sync();
+  }, [meeting, sync]);
+
   const leave = useCallback(async () => {
     if (meeting) await meeting.leave();
     setConnected(false);
@@ -207,6 +239,9 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     error,
     connect,
     toggleAudio,
+    grantStageAccess,
+    denyStageAccess,
+    joinApprovedStage,
     leave,
   };
 }
