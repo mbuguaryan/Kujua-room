@@ -43,6 +43,9 @@ export function RoomScreen({
     bootstrap.member.displayName,
   );
   const connectMedia = media.connect;
+  const grantStageAccess = media.grantStageAccess;
+  const denyStageAccess = media.denyStageAccess;
+  const joinApprovedStage = media.joinApprovedStage;
   const router = useRouter();
   const privateNotes = usePrivateNotes(
     bootstrap.session.id,
@@ -126,11 +129,15 @@ export function RoomScreen({
         const status = body.request?.status;
         setHandPending(status === "pending");
         if (status === "approved" && effectiveRole === "audience") {
+          await joinApprovedStage();
+          if (stopped) return;
           setEffectiveRole("speaker");
-          setNotice("You are now on stage. Your microphone is available.");
+          setNotice("You are now on stage. Your microphone is on and ready.");
         }
-      } catch {
-        // The next poll retries automatically.
+      } catch (cause) {
+        if (!stopped && effectiveRole === "audience") {
+          console.error("Unable to join approved stage", cause);
+        }
       }
     };
 
@@ -140,7 +147,12 @@ export function RoomScreen({
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [bootstrap.session.id, canModerate, effectiveRole]);
+  }, [
+    bootstrap.session.id,
+    canModerate,
+    effectiveRole,
+    joinApprovedStage,
+  ]);
 
   const leave = useCallback(async () => {
     await media.leave();
@@ -179,7 +191,20 @@ export function RoomScreen({
   const resolveStage = useCallback(
     async (requestId: string, action: "approve" | "decline") => {
       setStageBusyId(requestId);
+      const request = stageRequests.find((item) => item.id === requestId);
+      if (!request) {
+        setNotice("That request is no longer available.");
+        setStageBusyId(undefined);
+        return;
+      }
+
+      let providerGranted = false;
       try {
+        if (action === "approve") {
+          await grantStageAccess(request.userId);
+          providerGranted = true;
+        }
+
         const response = await fetch(`/api/sessions/${bootstrap.session.id}/stage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -191,11 +216,23 @@ export function RoomScreen({
           };
           throw new Error(body.error ?? "Unable to resolve stage request.");
         }
+
+        if (action === "decline") {
+          await denyStageAccess(request.userId).catch(() => undefined);
+        }
+
         setStageRequests((current) =>
-          current.filter((request) => request.id !== requestId),
+          current.filter((item) => item.id !== requestId),
         );
-        setNotice(action === "approve" ? "Participant moved to stage." : "Request declined.");
+        setNotice(
+          action === "approve"
+            ? "Participant approved. Their microphone is now available."
+            : "Request declined.",
+        );
       } catch (cause) {
+        if (providerGranted) {
+          await denyStageAccess(request.userId).catch(() => undefined);
+        }
         setNotice(
           cause instanceof Error ? cause.message : "Unable to resolve stage request.",
         );
@@ -203,7 +240,12 @@ export function RoomScreen({
         setStageBusyId(undefined);
       }
     },
-    [bootstrap.session.id],
+    [
+      bootstrap.session.id,
+      denyStageAccess,
+      grantStageAccess,
+      stageRequests,
+    ],
   );
 
   const createInvitation = useCallback(async () => {
