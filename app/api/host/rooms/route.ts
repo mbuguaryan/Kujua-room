@@ -9,6 +9,15 @@ import { rateLimit } from "@/lib/security/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type SessionPlanRow = {
+  id: string;
+  room_id: string;
+  title: string;
+  agenda: string | null;
+  goals?: string | null;
+  started_at: string | null;
+};
+
 async function hostUser() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -53,7 +62,7 @@ export async function GET() {
       return NextResponse.json({ rooms: [], displayName: profile?.display_name ?? "Host" });
     }
 
-    const [{ data: rooms, error: roomsError }, { data: liveSessions, error: sessionsError }] = await Promise.all([
+    const [{ data: rooms, error: roomsError }, { data: liveSessionRows, error: sessionsError }] = await Promise.all([
       admin
         .from("rooms")
         .select("id,slug,name,description,access_mode,status,created_at")
@@ -62,14 +71,15 @@ export async function GET() {
         .order("created_at", { ascending: false }),
       admin
         .from("sessions")
-        .select("id,room_id,title,agenda,goals,started_at")
+        .select("*")
         .in("room_id", roomIds)
         .eq("status", "live"),
     ]);
     if (roomsError) throw roomsError;
     if (sessionsError) throw sessionsError;
 
-    const liveByRoom = new Map((liveSessions ?? []).map((session) => [session.room_id, session]));
+    const liveSessions = (liveSessionRows ?? []) as unknown as SessionPlanRow[];
+    const liveByRoom = new Map(liveSessions.map((session) => [session.room_id, session]));
     return NextResponse.json({
       displayName: profile?.display_name ?? "Host",
       rooms: (rooms ?? []).map((room) => {
@@ -85,7 +95,7 @@ export async function GET() {
                 id: live.id,
                 title: live.title,
                 agenda: live.agenda,
-                goals: live.goals,
+                goals: live.goals ?? null,
                 startedAt: live.started_at,
               }
             : null,
