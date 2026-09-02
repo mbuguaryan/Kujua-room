@@ -4,8 +4,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { joinRoomSchema } from "@/lib/validation/schemas";
 import { apiError } from "@/lib/security/http";
 import { rateLimit } from "@/lib/security/rate-limit";
-import { mediaAdapter } from "@/lib/media";
-import { audit } from "@/lib/room/audit";
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   try {
@@ -24,26 +22,14 @@ export async function POST(request: NextRequest) {
         if (accessError) throw accessError;
       }
       await admin.from("profiles").upsert({ user_id: user.id, display_name: body.displayName });
-      let { data: session } = await admin.from("sessions").select("id,status").eq("room_id", room.id).eq("status", "live").maybeSingle();
+      const { data: session, error: sessionError } = await admin.from("sessions").select("id,status").eq("room_id", room.id).eq("status", "live").maybeSingle();
+      if (sessionError) throw sessionError;
       if (!session) {
-        const now = new Date().toISOString();
-        const meeting = await mediaAdapter().createMeeting(room.name);
-        const { data: created, error: createError } = await admin.from("sessions").insert({ room_id: room.id, title: room.name, agenda: null, status: "live", created_by: user.id, created_at: now, started_at: now, media_provider: "cloudflare-realtimekit", provider_meeting_id: meeting.meetingId, media_created_at: now }).select("id,status").single();
-        if (createError?.code === "23505") {
-          const { data: existing } = await admin.from("sessions").select("id,status").eq("room_id", room.id).eq("status", "live").maybeSingle();
-          session = existing;
-        } else if (createError) throw createError;
-        else {
-          session = created;
-          if (session) await audit(admin, { actor_user_id: user.id, target_user_id: null, room_id: room.id, session_id: session.id, action: "session_started", metadata: { source: "host_join", access_mode: body.accessMode ?? room.access_mode }, created_at: now });
-        }
+        return NextResponse.json({ error: "No live session in this room. Start one from the Host workspace." }, { status: 409 });
       }
-      return NextResponse.json({ data: { room_id: room.id, room_name: room.name, role: "host", session_id: session?.id, session_status: session?.status, access_mode: body.accessMode ?? room.access_mode } });
+      return NextResponse.json({ data: { room_id: room.id, room_name: room.name, role: "host", session_id: session.id, session_status: session.status, access_mode: body.accessMode ?? room.access_mode } });
     }
 
-    // Vercel overwrites x-forwarded-for with the public client IP. Rate-limit
-    // before anonymous Auth user creation so clearing cookies/rotating anonymous
-    // identities cannot bypass the join limiter or create unbounded Auth users.
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     await rateLimit("room-join-ip", clientIp, 20, 300);
 

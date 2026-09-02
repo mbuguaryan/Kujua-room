@@ -38,4 +38,14 @@ export const hostLoginSchema = z.object({
   email: z.string().email().max(320),
   password: z.string().min(8).max(200),
 });
+export const createRoomSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).optional().default(""),
+  accessMode: z.enum(["public", "private"]).default("private"),
+});
+export const startSessionSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  agenda: z.string().trim().max(4000).optional().default(""),
+  goals: z.string().trim().max(4000).optional().default(""),
+});
 export const messageSchema = z.object({ recipientId: uuidSchema.nullable().optional(), message: z.string().trim().min(1).max(2000) });

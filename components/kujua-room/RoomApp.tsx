@@ -6,7 +6,7 @@ import { readRecoveryState } from "@/lib/room/recovery";
 import { JoinScreen } from "./JoinScreen";
 import { RoomScreen } from "./RoomScreen";
 
-const labels: Record<JoinState, string> = { idle: "", "validating-invite": "Validating invitation…", authenticating: "Creating your secure identity…", "requesting-microphone": "Preparing your microphone…", "testing-microphone": "Testing your microphone…", "joining-room": "Joining Men’s Conference…", "requesting-media-token": "Securing live audio…", "connecting-media": "Connecting securely…", connected: "Connected", reconnecting: "Connection interrupted. Reconnecting…", failed: "Unable to join the room.", ended: "This session has ended." };
+const labels: Record<JoinState, string> = { idle: "", "validating-invite": "Validating invitation…", authenticating: "Creating your secure identity…", "requesting-microphone": "Preparing your microphone…", "testing-microphone": "Testing your microphone…", "joining-room": "Joining room…", "requesting-media-token": "Securing live audio…", "connecting-media": "Connecting securely…", connected: "Connected", reconnecting: "Connection interrupted. Reconnecting…", failed: "Unable to join the room.", ended: "This session has ended." };
 
 type HostAccess = "public" | "private";
 
