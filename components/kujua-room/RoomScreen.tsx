@@ -14,11 +14,17 @@ import {
 import { usePrivateNotes } from "@/hooks/usePrivateNotes";
 import { useKujuaRealtimeKit } from "@/hooks/useRealtimeKit";
 import { useVoiceActivityReporter } from "@/hooks/useVoiceActivityReporter";
+import { useRoomChat } from "@/hooks/useRoomChat";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ChatPanel } from "./ChatPanel";
 import { ToolbarIcon } from "./ToolbarIcon";
-import { clearRecoveryState, newClientInstanceId, readRecoveryState, saveRecoveryState } from "@/lib/room/recovery";
+import {
+  clearRecoveryState,
+  newClientInstanceId,
+  readRecoveryState,
+  saveRecoveryState,
+} from "@/lib/room/recovery";
 
 export function RoomScreen({
   bootstrap,
@@ -63,8 +69,22 @@ export function RoomScreen({
     bootstrap.session.id,
     bootstrap.member.userId,
   );
+  const chat = useRoomChat({
+    sessionId: bootstrap.session.id,
+    userId: bootstrap.member.userId,
+    open: panel === "chat",
+  });
   const canModerate =
     bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
+
+  const toggleChat = useCallback(() => {
+    const opening = panel !== "chat";
+    setPanel(opening ? "chat" : null);
+    if (opening) {
+      chat.markRead();
+      chat.clearPreview();
+    }
+  }, [chat, panel]);
 
   useEffect(() => {
     if (!notice) return;
@@ -73,29 +93,66 @@ export function RoomScreen({
   }, [notice]);
 
   useEffect(() => {
+    if (!chat.latestIncoming || panel === "chat") return;
+    const timeout = window.setTimeout(() => chat.clearPreview(), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [chat, chat.latestIncoming, panel]);
+
+  useEffect(() => {
     let cancelled = false;
     const connect = async () => {
       const prior = readRecoveryState(bootstrap.room.slug);
       const clientInstanceId = prior?.clientInstanceId ?? newClientInstanceId();
-      saveRecoveryState({ roomSlug: bootstrap.room.slug, sessionId: bootstrap.session.id, clientInstanceId });
+      saveRecoveryState({
+        roomSlug: bootstrap.room.slug,
+        sessionId: bootstrap.session.id,
+        clientInstanceId,
+      });
       for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
         try {
-          const joined = await fetch(`/api/sessions/${bootstrap.session.id}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientInstanceId }) });
+          const joined = await fetch(
+            `/api/sessions/${bootstrap.session.id}/join`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ clientInstanceId }),
+            },
+          );
           if (!joined.ok) throw new Error("join failed");
-          const response = await fetch(`/api/sessions/${bootstrap.session.id}/media-token`, { method: "POST" });
+          const response = await fetch(
+            `/api/sessions/${bootstrap.session.id}/media-token`,
+            { method: "POST" },
+          );
           if (!response.ok) throw new Error("media token failed");
-          const token = await response.json() as { authToken: string };
-          await connectMedia(token.authToken, deviceId, Boolean(bootstrap.recovered));
+          const token = (await response.json()) as { authToken: string };
+          await connectMedia(
+            token.authToken,
+            deviceId,
+            Boolean(bootstrap.recovered),
+          );
           return;
         } catch (cause) {
-          if (attempt === 2) { console.error("Room media recovery failed", cause); return; }
-          await new Promise((resolve) => window.setTimeout(resolve, 500 * (2 ** attempt)));
+          if (attempt === 2) {
+            console.error("Room media recovery failed", cause);
+            return;
+          }
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, 500 * 2 ** attempt),
+          );
         }
       }
     };
     void connect();
-    return () => { cancelled = true; };
-  }, [bootstrap.recovered, bootstrap.room.slug, bootstrap.session.id, connectMedia, deviceId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bootstrap.recovered,
+    bootstrap.room.slug,
+    bootstrap.session.id,
+    connectMedia,
+    deviceId,
+  ]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -132,15 +189,29 @@ export function RoomScreen({
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "stage_requests", filter: `session_id=eq.${bootstrap.session.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "stage_requests",
+          filter: `session_id=eq.${bootstrap.session.id}`,
+        },
         () => setStageRevision((value) => value + 1),
       )
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "session_participants", filter: `session_id=eq.${bootstrap.session.id}` },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "session_participants",
+          filter: `session_id=eq.${bootstrap.session.id}`,
+        },
         ({ new: value }) => {
           const row = value as Record<string, unknown>;
-          if (row.user_id === bootstrap.member.userId && typeof row.current_role === "string") setEffectiveRole(row.current_role as RoomRole);
+          if (
+            row.user_id === bootstrap.member.userId &&
+            typeof row.current_role === "string"
+          )
+            setEffectiveRole(row.current_role as RoomRole);
         },
       )
       .subscribe();
@@ -154,9 +225,10 @@ export function RoomScreen({
 
     const syncStage = async () => {
       try {
-        const response = await fetch(`/api/sessions/${bootstrap.session.id}/stage`, {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/sessions/${bootstrap.session.id}/stage`,
+          { cache: "no-store" },
+        );
         if (!response.ok || stopped) return;
         const body = (await response.json()) as {
           requests?: StageRequestItem[];
@@ -207,37 +279,74 @@ export function RoomScreen({
     router.push(`/r/${bootstrap.room.slug}`);
   }, [bootstrap.room.slug, bootstrap.session.id, media, router]);
 
-  const muteParticipant = useCallback(async (userId: string) => {
-    setModerationBusy(userId);
-    try {
-      const response = await fetch(`/api/sessions/${bootstrap.session.id}/participants/${userId}/mute`, { method: "POST" });
-      if (!response.ok) throw new Error("Mute authorization failed.");
-      await media.muteParticipant(userId);
-      setNotice("Participant muted. They may unmute if still allowed to speak.");
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Unable to mute participant."); }
-    finally { setModerationBusy(undefined); }
-  }, [bootstrap.session.id, media]);
+  const muteParticipant = useCallback(
+    async (userId: string) => {
+      setModerationBusy(userId);
+      try {
+        const response = await fetch(
+          `/api/sessions/${bootstrap.session.id}/participants/${userId}/mute`,
+          { method: "POST" },
+        );
+        if (!response.ok) throw new Error("Mute authorization failed.");
+        await media.muteParticipant(userId);
+        setNotice("Participant muted. They may unmute if still allowed to speak.");
+      } catch (cause) {
+        setNotice(
+          cause instanceof Error ? cause.message : "Unable to mute participant.",
+        );
+      } finally {
+        setModerationBusy(undefined);
+      }
+    },
+    [bootstrap.session.id, media],
+  );
 
-  const revokeSpeaker = useCallback(async (userId: string) => {
-    setModerationBusy(userId);
-    try {
-      await denyStageAccess(userId);
-      const response = await fetch(`/api/sessions/${bootstrap.session.id}/participants/${userId}/role`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "audience", permanent: false }) });
-      if (!response.ok) throw new Error("Unable to revoke speaking permission.");
-      setNotice("Speaking permission revoked.");
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Unable to revoke speaking permission."); }
-    finally { setModerationBusy(undefined); }
-  }, [bootstrap.session.id, denyStageAccess]);
+  const revokeSpeaker = useCallback(
+    async (userId: string) => {
+      setModerationBusy(userId);
+      try {
+        await denyStageAccess(userId);
+        const response = await fetch(
+          `/api/sessions/${bootstrap.session.id}/participants/${userId}/role`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ role: "audience", permanent: false }),
+          },
+        );
+        if (!response.ok)
+          throw new Error("Unable to revoke speaking permission.");
+        setNotice("Speaking permission revoked.");
+      } catch (cause) {
+        setNotice(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to revoke speaking permission.",
+        );
+      } finally {
+        setModerationBusy(undefined);
+      }
+    },
+    [bootstrap.session.id, denyStageAccess],
+  );
 
   const muteAll = useCallback(async () => {
     setModerationBusy("all");
     try {
-      const response = await fetch(`/api/sessions/${bootstrap.session.id}/participants/mute-all`, { method: "POST" });
+      const response = await fetch(
+        `/api/sessions/${bootstrap.session.id}/participants/mute-all`,
+        { method: "POST" },
+      );
       if (!response.ok) throw new Error("Mute-all authorization failed.");
       await media.muteAll();
       setNotice("All participants muted. Approved speakers may unmute themselves.");
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Unable to mute participants."); }
-    finally { setModerationBusy(undefined); }
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error ? cause.message : "Unable to mute participants.",
+      );
+    } finally {
+      setModerationBusy(undefined);
+    }
   }, [bootstrap.session.id, media]);
 
   const toggleHand = useCallback(async () => {
@@ -245,11 +354,14 @@ export function RoomScreen({
     setHandBusy(true);
     try {
       const action = handPending ? "cancel" : "raise";
-      const response = await fetch(`/api/sessions/${bootstrap.session.id}/stage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
+      const response = await fetch(
+        `/api/sessions/${bootstrap.session.id}/stage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        },
+      );
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as {
           error?: string;
@@ -257,9 +369,13 @@ export function RoomScreen({
         throw new Error(body.error ?? "Unable to update your hand.");
       }
       setHandPending(action === "raise");
-      setNotice(action === "raise" ? "Request to speak sent." : "Request cancelled.");
+      setNotice(
+        action === "raise" ? "Request to speak sent." : "Request cancelled.",
+      );
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Unable to update your hand.");
+      setNotice(
+        cause instanceof Error ? cause.message : "Unable to update your hand.",
+      );
     } finally {
       setHandBusy(false);
     }
@@ -282,11 +398,14 @@ export function RoomScreen({
           providerGranted = true;
         }
 
-        const response = await fetch(`/api/sessions/${bootstrap.session.id}/stage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, requestId }),
-        });
+        const response = await fetch(
+          `/api/sessions/${bootstrap.session.id}/stage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, requestId }),
+          },
+        );
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as {
             error?: string;
@@ -329,7 +448,9 @@ export function RoomScreen({
     if (inviteBusy) return;
     setInviteBusy(true);
     try {
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(
+        Date.now() + 24 * 60 * 60 * 1000,
+      ).toISOString();
       const response = await fetch("/api/invites/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -353,11 +474,18 @@ export function RoomScreen({
         setNotice(`Participant invitation: ${link}`);
       }
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Unable to create invitation.");
+      setNotice(
+        cause instanceof Error ? cause.message : "Unable to create invitation.",
+      );
     } finally {
       setInviteBusy(false);
     }
-  }, [bootstrap.room.capacity, bootstrap.room.id, bootstrap.room.slug, inviteBusy]);
+  }, [
+    bootstrap.room.capacity,
+    bootstrap.room.id,
+    bootstrap.room.slug,
+    inviteBusy,
+  ]);
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -404,10 +532,35 @@ export function RoomScreen({
               ? "Connected"
               : (media.error ?? "Connecting securely…")}
           </small>
-          <small className="connection-detail">{{ connecting: "Connecting", connected: "Connected", reconnecting: "Reconnecting", "connection-lost": "Connection lost", failed: "Unable to connect" }[media.connectionState]}</small>
+          <small className="connection-detail">
+            {{
+              connecting: "Connecting",
+              connected: "Connected",
+              reconnecting: "Reconnecting",
+              "connection-lost": "Connection lost",
+              failed: "Unable to connect",
+            }[media.connectionState]}
+          </small>
         </div>
         <nav>
-          <button aria-label="Chat" aria-expanded={panel === "chat"} className={panel === "chat" ? "active" : ""} onClick={() => setPanel(panel === "chat" ? null : "chat")}><ToolbarIcon name="chat" />Chat</button>
+          <button
+            aria-label={
+              chat.unreadCount
+                ? `Chat, ${chat.unreadCount} unread messages`
+                : "Chat"
+            }
+            aria-expanded={panel === "chat"}
+            className={`chat-nav-button${panel === "chat" ? " active" : ""}`}
+            onClick={toggleChat}
+          >
+            <ToolbarIcon name="chat" />
+            Chat
+            {chat.unreadCount ? (
+              <span className="chat-unread-badge" aria-hidden="true">
+                {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+              </span>
+            ) : null}
+          </button>
           <button
             aria-label="Participants"
             aria-expanded={panel === "participants"}
@@ -437,6 +590,24 @@ export function RoomScreen({
         </nav>
       </header>
 
+      {chat.latestIncoming && panel !== "chat" ? (
+        <button
+          type="button"
+          className="chat-message-peek"
+          onClick={() => {
+            setPanel("chat");
+            chat.markRead();
+            chat.clearPreview();
+          }}
+        >
+          <span>
+            {chat.latestIncoming.recipientId ? "Private message" : "New message"} ·{" "}
+            <strong>{chat.latestIncoming.senderName}</strong>
+          </span>
+          <b>{chat.latestIncoming.message}</b>
+        </button>
+      ) : null}
+
       <div className="coaching-banner">
         Coaching with <b>Keith Muoki</b> ·{" "}
         <a
@@ -452,13 +623,29 @@ export function RoomScreen({
         <StageRequestsPanel
           requests={stageRequests}
           busyId={stageBusyId}
-          onResolve={(requestId, action) => void resolveStage(requestId, action)}
+          onResolve={(requestId, action) =>
+            void resolveStage(requestId, action)
+          }
         />
       ) : null}
       {panel === "participants" ? (
-        <ParticipantsPanel participants={media.participants} canModerate={canModerate} busyUserId={moderationBusy} onMute={(id) => void muteParticipant(id)} onRevoke={(id) => void revokeSpeaker(id)} />
+        <ParticipantsPanel
+          participants={media.participants}
+          canModerate={canModerate}
+          busyUserId={moderationBusy}
+          onMute={(id) => void muteParticipant(id)}
+          onRevoke={(id) => void revokeSpeaker(id)}
+        />
       ) : null}
-      {panel === "chat" ? <ChatPanel sessionId={bootstrap.session.id} userId={bootstrap.member.userId} participants={media.participants} /> : null}
+      {panel === "chat" ? (
+        <ChatPanel
+          sessionId={bootstrap.session.id}
+          userId={bootstrap.member.userId}
+          participants={media.participants}
+          messages={chat.messages}
+          onRefresh={chat.refresh}
+        />
+      ) : null}
       {panel === "notes" ? <SessionNotesPanel notes={notes} /> : null}
       {panel === "private" ? (
         <PrivateNotesPanel
@@ -474,18 +661,42 @@ export function RoomScreen({
       </section>
 
       <footer className="controls">
-        <button className="control" aria-label="Open chat" title="Chat" onClick={() => setPanel(panel === "chat" ? null : "chat")}><ToolbarIcon name="chat" />Chat</button>
-        <button className="control" aria-label="Open participants" title="People" onClick={() => setPanel(panel === "participants" ? null : "participants")}><ToolbarIcon name="users" />People</button>
-        {canModerate ? <button className="control" aria-label="Mute all participants" title="Mute all" disabled={Boolean(moderationBusy)} onClick={() => void muteAll()}><ToolbarIcon name="volume-x" />Mute All</button> : null}
+        <button
+          className="control"
+          aria-label="Open participants"
+          title="People"
+          onClick={() =>
+            setPanel(panel === "participants" ? null : "participants")
+          }
+        >
+          <ToolbarIcon name="users" />People
+        </button>
+        {canModerate ? (
+          <button
+            className="control"
+            aria-label="Mute all participants"
+            title="Mute all"
+            disabled={Boolean(moderationBusy)}
+            onClick={() => void muteAll()}
+          >
+            <ToolbarIcon name="volume-x" />Mute All
+          </button>
+        ) : null}
         {effectiveRole !== "audience" ? (
           <button
             className="control"
             aria-label="Mute or unmute microphone"
-            title={media.meeting?.self.audioEnabled ? "Mute microphone" : "Unmute microphone"}
+            title={
+              media.meeting?.self.audioEnabled
+                ? "Mute microphone"
+                : "Unmute microphone"
+            }
             aria-pressed={media.meeting ? !media.meeting.self.audioEnabled : true}
             onClick={() => void media.toggleAudio()}
           >
-            <ToolbarIcon name={media.meeting?.self.audioEnabled ? "mic" : "mic-off"} />
+            <ToolbarIcon
+              name={media.meeting?.self.audioEnabled ? "mic" : "mic-off"}
+            />
             {media.meeting?.self.audioEnabled ? "Mute" : "Unmute"}
           </button>
         ) : (
@@ -515,7 +726,12 @@ export function RoomScreen({
           </button>
         ) : null}
 
-        <button className="control leave" aria-label="Leave room" title="Leave room" onClick={() => void leave()}>
+        <button
+          className="control leave"
+          aria-label="Leave room"
+          title="Leave room"
+          onClick={() => void leave()}
+        >
           <ToolbarIcon name="log-out" />Leave
         </button>
 
@@ -531,7 +747,10 @@ export function RoomScreen({
                   { method: "POST" },
                 );
                 const body = (await response.json()) as { endsAt?: string };
-                if (body.endsAt) { clearRecoveryState(); setEndsAt(body.endsAt); }
+                if (body.endsAt) {
+                  clearRecoveryState();
+                  setEndsAt(body.endsAt);
+                }
               }
             }}
           >
