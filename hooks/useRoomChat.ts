@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RoomMessage } from "@/types/room";
 
@@ -80,12 +80,15 @@ export function useRoomChat({
   const markRead = useCallback(() => setUnreadCount(0), []);
   const clearPreview = useCallback(() => setLatestIncoming(null), []);
 
-  return {
-    messages,
-    unreadCount,
-    latestIncoming,
-    refresh,
-    markRead,
-    clearPreview,
-  };
+  return useMemo(
+    () => ({
+      messages,
+      unreadCount,
+      latestIncoming,
+      refresh,
+      markRead,
+      clearPreview,
+    }),
+    [messages, unreadCount, latestIncoming, refresh, markRead, clearPreview],
+  );
 }
