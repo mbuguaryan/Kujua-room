@@ -10,6 +10,7 @@ export async function GET(
   try {
     const { sessionId } = await params;
     const { user, member, session, admin } = await sessionAuthority(sessionId);
+    const currentSession = session as typeof session & { goals?: string | null };
     const [
       { data: room },
       { data: note },
@@ -41,6 +42,7 @@ export async function GET(
     if (!room) throw new Error("Room unavailable");
     const storedRole = attendance?.current_role ?? member.role;
     const clientRole = storedRole === "audience" ? "speaker" : storedRole;
+    const goals = currentSession.goals ?? null;
     return NextResponse.json({
       room: {
         id: room.id,
@@ -53,7 +55,7 @@ export async function GET(
         id: session.id,
         title: session.title,
         agenda: session.agenda ?? null,
-        goals: session.goals ?? null,
+        goals,
         status: session.status,
         endsAt: session.ends_at,
       },
@@ -69,7 +71,7 @@ export async function GET(
         updatedAt: note?.updated_at,
         sessionTitle: session.title,
         agenda: session.agenda ?? null,
-        goals: session.goals ?? null,
+        goals,
       },
     });
   } catch (error) {
