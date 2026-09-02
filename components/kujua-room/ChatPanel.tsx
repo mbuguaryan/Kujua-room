@@ -2,18 +2,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Participant, RoomMessage } from "@/types/room";
-import { createClient } from "@/lib/supabase/client";
 
 export function ChatPanel({
   sessionId,
   userId,
   participants,
+  messages,
+  onRefresh,
 }: {
   sessionId: string;
   userId: string;
   participants: Participant[];
+  messages: RoomMessage[];
+  onRefresh: () => Promise<void>;
 }) {
-  const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [text, setText] = useState("");
   const [recipient, setRecipient] = useState("");
   const [mode, setMode] = useState<"room" | "direct">("room");
@@ -25,41 +27,20 @@ export function ChatPanel({
   const directParticipants = useMemo(() => {
     const seen = new Set<string>();
     return participants.filter((participant) => {
-      if (participant.local || participant.id === userId || seen.has(participant.id)) return false;
+      if (
+        participant.local ||
+        participant.id === userId ||
+        seen.has(participant.id)
+      )
+        return false;
       seen.add(participant.id);
       return true;
     });
   }, [participants, userId]);
 
-  useEffect(() => {
-    const load = () =>
-      void fetch(`/api/sessions/${sessionId}/messages`, { cache: "no-store" })
-        .then((response) => response.json())
-        .then((body: { messages?: RoomMessage[] }) => setMessages(body.messages ?? []));
-
-    load();
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`messages-${sessionId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "room_messages",
-          filter: `session_id=eq.${sessionId}`,
-        },
-        load,
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [sessionId]);
-
   const visible = useMemo(() => {
-    if (mode === "room") return messages.filter((message) => message.recipientId === null);
+    if (mode === "room")
+      return messages.filter((message) => message.recipientId === null);
     if (!recipient) return [];
     return messages.filter(
       (message) =>
@@ -69,7 +50,8 @@ export function ChatPanel({
   }, [messages, mode, recipient, userId]);
 
   useEffect(() => {
-    if (!minimized) messagesEndRef.current?.scrollIntoView({ block: "end" });
+    if (!minimized)
+      messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [visible.length, minimized, mode, recipient]);
 
   async function send() {
@@ -88,13 +70,8 @@ export function ChatPanel({
         }),
       });
       if (!response.ok) throw new Error("Unable to send message.");
-      const body = (await response.json()) as { message: RoomMessage };
-      setMessages((current) =>
-        current.some((item) => item.id === body.message.id)
-          ? current
-          : [...current, body.message],
-      );
       setText("");
+      await onRefresh();
     } finally {
       setBusy(false);
     }
@@ -123,7 +100,11 @@ export function ChatPanel({
       <div className="chat-drawer-head youtube-like">
         <div className="chat-title-block">
           <strong>Live chat</strong>
-          <span>{mode === "room" ? `${visible.length} messages` : "Private conversation"}</span>
+          <span>
+            {mode === "room"
+              ? `${visible.length} messages`
+              : "Private conversation"}
+          </span>
         </div>
         <div className="chat-window-actions">
           <button
@@ -168,7 +149,10 @@ export function ChatPanel({
       {mode === "direct" ? (
         <label className="chat-recipient">
           <span>To</span>
-          <select value={recipient} onChange={(event) => setRecipient(event.target.value)}>
+          <select
+            value={recipient}
+            onChange={(event) => setRecipient(event.target.value)}
+          >
             <option value="">Choose a participant</option>
             {directParticipants.map((participant) => (
               <option key={participant.id} value={participant.id}>
@@ -184,10 +168,16 @@ export function ChatPanel({
           visible.map((message) => (
             <article
               key={message.id}
-              className={message.senderId === userId ? "chat-message mine" : "chat-message"}
+              className={
+                message.senderId === userId
+                  ? "chat-message mine"
+                  : "chat-message"
+              }
             >
               <div>
-                <strong>{message.senderId === userId ? "You" : message.senderName}</strong>
+                <strong>
+                  {message.senderId === userId ? "You" : message.senderName}
+                </strong>
                 {message.recipientId ? <span>Private</span> : null}
               </div>
               <p>{message.message}</p>
@@ -195,7 +185,9 @@ export function ChatPanel({
           ))
         ) : (
           <div className="chat-empty">
-            <strong>{mode === "room" ? "No messages yet" : "No private messages yet"}</strong>
+            <strong>
+              {mode === "room" ? "No messages yet" : "No private messages yet"}
+            </strong>
             <span>
               {mode === "room"
                 ? "Messages from everyone in the room will appear here."
@@ -213,7 +205,9 @@ export function ChatPanel({
           className="form-input"
           value={text}
           maxLength={2000}
-          placeholder={mode === "room" ? "Say something…" : "Write a private message…"}
+          placeholder={
+            mode === "room" ? "Say something…" : "Write a private message…"
+          }
           disabled={mode === "direct" && !recipient}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
