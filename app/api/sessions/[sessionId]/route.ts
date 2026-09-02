@@ -52,6 +52,8 @@ export async function GET(
       session: {
         id: session.id,
         title: session.title,
+        agenda: session.agenda ?? null,
+        goals: session.goals ?? null,
         status: session.status,
         endsAt: session.ends_at,
       },
@@ -61,8 +63,8 @@ export async function GET(
         displayName: profile?.display_name ?? "Participant",
       },
       notes: {
-        title: note?.title ?? session.title,
-        body: note?.body ?? session.agenda ?? "",
+        title: note?.title ?? "Live notes",
+        body: note?.body ?? "",
         points: Array.isArray(note?.points) ? note.points : [],
         updatedAt: note?.updated_at,
       },
