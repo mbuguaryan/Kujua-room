@@ -22,6 +22,7 @@ const REPORT_THROTTLE_MS = 10_000;
 const LOCAL_SAMPLE_MS = 750;
 const REMOTE_POLL_MS = 5_000;
 const LOCAL_VOICE_RMS_THRESHOLD = 0.035;
+const RECENT_VOICE_WINDOW_MS = 30_000;
 
 export function useVoiceActivityReporter({
   sessionId,
@@ -40,6 +41,7 @@ export function useVoiceActivityReporter({
     const liveMeeting = meeting as VoiceActivityMeeting;
     let stopped = false;
     let lastReportedAt = 0;
+    let lastVoiceObservedAt = 0;
     let localSampleTimer: number | undefined;
     let remotePollTimer: number | undefined;
     let audioContext: AudioContext | null = null;
@@ -47,15 +49,20 @@ export function useVoiceActivityReporter({
     let analyser: AnalyserNode | null = null;
     let timeDomain: Uint8Array<ArrayBuffer> | null = null;
 
-    const report = () => {
+    const report = (force = false) => {
       if (stopped) return;
       const now = Date.now();
-      if (now - lastReportedAt < REPORT_THROTTLE_MS) return;
+      if (!force && now - lastReportedAt < REPORT_THROTTLE_MS) return;
       lastReportedAt = now;
       void fetch(`/api/sessions/${sessionId}/voice-activity`, {
         method: "POST",
         keepalive: true,
       }).catch(() => undefined);
+    };
+
+    const observeVoice = () => {
+      lastVoiceObservedAt = Date.now();
+      report();
     };
 
     const stopLocalAnalyser = () => {
@@ -92,31 +99,48 @@ export function useVoiceActivityReporter({
             squareSum += normalized * normalized;
           }
           const rms = Math.sqrt(squareSum / timeDomain.length);
-          if (rms >= LOCAL_VOICE_RMS_THRESHOLD) report();
+          if (rms >= LOCAL_VOICE_RMS_THRESHOLD) observeVoice();
         }, LOCAL_SAMPLE_MS);
       } catch {
         stopLocalAnalyser();
       }
     };
 
+    const hasRemoteVoice = () =>
+      liveMeeting.participants.active
+        .toArray()
+        .some((participant) => participant.audioEnabled !== false);
+
     const onLocalAudioUpdate = () => startLocalAnalyser();
-    const onRemoteSpeaker = () => report();
+    const onRemoteSpeaker = () => observeVoice();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        // If real voice was observed immediately before backgrounding, flush one
+        // final keepalive report before the browser can freeze JavaScript.
+        if (Date.now() - lastVoiceObservedAt <= RECENT_VOICE_WINDOW_MS) report(true);
+        return;
+      }
+      // On resume, immediately reconcile remote activity instead of waiting for
+      // the next poll interval. This also cancels an inactivity countdown if
+      // voice resumed while the page was being restored.
+      if (hasRemoteVoice()) observeVoice();
+      if (liveMeeting.self.audioEnabled) startLocalAnalyser();
+    };
 
     liveMeeting.self.on("audioUpdate", onLocalAudioUpdate);
     liveMeeting.participants.on("activeSpeaker", onRemoteSpeaker);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     startLocalAnalyser();
 
     remotePollTimer = window.setInterval(() => {
-      const hasRemoteVoice = liveMeeting.participants.active
-        .toArray()
-        .some((participant) => participant.audioEnabled !== false);
-      if (hasRemoteVoice) report();
+      if (hasRemoteVoice()) observeVoice();
     }, REMOTE_POLL_MS);
 
     return () => {
       stopped = true;
       liveMeeting.self.off("audioUpdate", onLocalAudioUpdate);
       liveMeeting.participants.off("activeSpeaker", onRemoteSpeaker);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (remotePollTimer) window.clearInterval(remotePollTimer);
       stopLocalAnalyser();
     };
