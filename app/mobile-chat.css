@@ -10,8 +10,11 @@
   .call-header nav button.chat-nav-button{border-color:#4a514d;background:#292e2b}
   .call-header nav button.chat-nav-button.active{border-color:var(--ember2);background:#342b26}
   .chat-message-peek{top:64px;width:calc(100vw - 16px);padding:10px 12px;border-radius:0 0 14px 14px}
-  .chat-drawer,.chat-drawer.expanded{top:58px!important;left:0;right:0;bottom:auto!important;width:100%;height:min(66dvh,620px);border-top:0;border-radius:0 0 18px 18px;box-shadow:0 22px 54px #000b}
+  .chat-drawer,.chat-drawer.expanded{top:58px!important;left:0;right:0;bottom:auto!important;width:100%;height:min(54dvh,500px);border-top:0;border-radius:0 0 18px 18px;box-shadow:0 22px 54px #000b}
   .chat-drawer.expanded{height:calc(100dvh - 58px)}
-  .chat-drawer .chat-messages{padding-bottom:10px}
+  .chat-drawer .chat-messages{padding:6px 12px 8px}
+  .chat-drawer .chat-compose{align-items:center;gap:6px;padding:7px 9px max(7px,env(safe-area-inset-bottom))}
+  .chat-drawer .chat-compose .form-input{height:38px;min-height:38px;padding:7px 10px;border-radius:8px;font-size:13px}
+  .chat-drawer .chat-compose .btn{height:38px;min-width:58px;padding:0 11px;border-radius:8px;font-size:12px}
   .chat-minimized{top:70px;right:12px;bottom:auto}
 }
