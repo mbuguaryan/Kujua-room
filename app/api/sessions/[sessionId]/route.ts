@@ -67,6 +67,9 @@ export async function GET(
         body: note?.body ?? "",
         points: Array.isArray(note?.points) ? note.points : [],
         updatedAt: note?.updated_at,
+        sessionTitle: session.title,
+        agenda: session.agenda ?? null,
+        goals: session.goals ?? null,
       },
     });
   } catch (error) {
