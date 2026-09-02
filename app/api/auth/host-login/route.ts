@@ -16,9 +16,6 @@ export async function POST(request: Request) {
       ?.split(",")[0]
       ?.trim();
 
-    // Vercel overwrites x-forwarded-for at the edge, so the IP component cannot
-    // be spoofed by a normal client. Pair it with the normalized email so both
-    // distributed guessing and repeated attacks on one account are throttled.
     await rateLimit(
       "host-login",
       `${forwarded ?? "unknown"}:${input.email.toLowerCase()}`,
@@ -36,29 +33,20 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-    const { data: room, error: roomError } = await admin
-      .from("rooms")
-      .select("id")
-      .eq("slug", "mens-conference")
-      .single();
-    if (roomError) throw roomError;
-
     const { data: membership, error: membershipError } = await admin
       .from("room_members")
-      .select("role,status")
-      .eq("room_id", room.id)
+      .select("room_id")
       .eq("user_id", data.user.id)
+      .eq("role", "host")
+      .eq("status", "active")
+      .limit(1)
       .maybeSingle();
     if (membershipError) throw membershipError;
 
-    if (
-      !membership ||
-      membership.role !== "host" ||
-      membership.status !== "active"
-    ) {
+    if (!membership) {
       await supabase.auth.signOut({ scope: "local" });
       return NextResponse.json(
-        { error: "This account is not authorized as the host of this room." },
+        { error: "This account is not authorized as a Kujua Room host." },
         { status: 403 },
       );
     }
