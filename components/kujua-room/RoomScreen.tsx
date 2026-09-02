@@ -13,9 +13,11 @@ import {
 } from "./StageRequestsPanel";
 import { usePrivateNotes } from "@/hooks/usePrivateNotes";
 import { useKujuaRealtimeKit } from "@/hooks/useRealtimeKit";
+import { useVoiceActivityReporter } from "@/hooks/useVoiceActivityReporter";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ChatPanel } from "./ChatPanel";
+import { ToolbarIcon } from "./ToolbarIcon";
 import { clearRecoveryState, newClientInstanceId, readRecoveryState, saveRecoveryState } from "@/lib/room/recovery";
 
 export function RoomScreen({
@@ -46,6 +48,12 @@ export function RoomScreen({
     bootstrap.member.role,
     bootstrap.member.displayName,
   );
+  useVoiceActivityReporter({
+    sessionId: bootstrap.session.id,
+    meeting: media.meeting,
+    connected: media.connected,
+    enabled: effectiveRole !== "audience",
+  });
   const connectMedia = media.connect;
   const grantStageAccess = media.grantStageAccess;
   const denyStageAccess = media.denyStageAccess;
@@ -399,7 +407,7 @@ export function RoomScreen({
           <small className="connection-detail">{{ connecting: "Connecting", connected: "Connected", reconnecting: "Reconnecting", "connection-lost": "Connection lost", failed: "Unable to connect" }[media.connectionState]}</small>
         </div>
         <nav>
-          <button aria-label="Chat" aria-expanded={panel === "chat"} className={panel === "chat" ? "active" : ""} onClick={() => setPanel(panel === "chat" ? null : "chat")}>Chat</button>
+          <button aria-label="Chat" aria-expanded={panel === "chat"} className={panel === "chat" ? "active" : ""} onClick={() => setPanel(panel === "chat" ? null : "chat")}><ToolbarIcon name="chat" />Chat</button>
           <button
             aria-label="Participants"
             aria-expanded={panel === "participants"}
@@ -408,7 +416,7 @@ export function RoomScreen({
               setPanel(panel === "participants" ? null : "participants")
             }
           >
-            People
+            <ToolbarIcon name="users" />People
           </button>
           <button
             aria-label="Today’s notes"
@@ -416,7 +424,7 @@ export function RoomScreen({
             className={panel === "notes" ? "active" : ""}
             onClick={() => setPanel(panel === "notes" ? null : "notes")}
           >
-            Agenda
+            <ToolbarIcon name="agenda" />Agenda
           </button>
           <button
             aria-label="My private notes"
@@ -424,7 +432,7 @@ export function RoomScreen({
             className={panel === "private" ? "active" : ""}
             onClick={() => setPanel(panel === "private" ? null : "private")}
           >
-            Notes
+            <ToolbarIcon name="notes" />Notes
           </button>
         </nav>
       </header>
@@ -466,47 +474,56 @@ export function RoomScreen({
       </section>
 
       <footer className="controls">
-        <button className="control" onClick={() => setPanel(panel === "chat" ? null : "chat")}>Chat</button>
-        <button className="control" onClick={() => setPanel(panel === "participants" ? null : "participants")}>People</button>
-        {canModerate ? <button className="control" disabled={Boolean(moderationBusy)} onClick={() => void muteAll()}>Mute All</button> : null}
+        <button className="control" aria-label="Open chat" title="Chat" onClick={() => setPanel(panel === "chat" ? null : "chat")}><ToolbarIcon name="chat" />Chat</button>
+        <button className="control" aria-label="Open participants" title="People" onClick={() => setPanel(panel === "participants" ? null : "participants")}><ToolbarIcon name="users" />People</button>
+        {canModerate ? <button className="control" aria-label="Mute all participants" title="Mute all" disabled={Boolean(moderationBusy)} onClick={() => void muteAll()}><ToolbarIcon name="volume-x" />Mute All</button> : null}
         {effectiveRole !== "audience" ? (
           <button
             className="control"
             aria-label="Mute or unmute microphone"
+            title={media.meeting?.self.audioEnabled ? "Mute microphone" : "Unmute microphone"}
             aria-pressed={media.meeting ? !media.meeting.self.audioEnabled : true}
             onClick={() => void media.toggleAudio()}
           >
-            Mic
+            <ToolbarIcon name={media.meeting?.self.audioEnabled ? "mic" : "mic-off"} />
+            {media.meeting?.self.audioEnabled ? "Mute" : "Unmute"}
           </button>
         ) : (
           <button
             className="control"
             aria-label={handPending ? "Lower hand" : "Raise hand"}
+            title={handPending ? "Lower hand" : "Raise hand"}
             aria-pressed={handPending}
             disabled={handBusy}
             onClick={() => void toggleHand()}
           >
-            {handPending ? "Lower hand" : "Hand"}
+            <ToolbarIcon name="hand" />
+            {handPending ? "Lower" : "Raise"}
           </button>
         )}
 
         {bootstrap.member.role === "host" ? (
           <button
             className="control"
+            aria-label="Invite participants"
+            title="Invite participants"
             disabled={inviteBusy}
             onClick={() => void createInvitation()}
           >
+            <ToolbarIcon name="user-plus" />
             {inviteBusy ? "Creating…" : "Invite"}
           </button>
         ) : null}
 
-        <button className="control leave" onClick={() => void leave()}>
-          Leave
+        <button className="control leave" aria-label="Leave room" title="Leave room" onClick={() => void leave()}>
+          <ToolbarIcon name="log-out" />Leave
         </button>
 
         {bootstrap.member.role === "host" ? (
           <button
             className="control leave"
+            aria-label="End session for everyone"
+            title="End session for everyone"
             onClick={async () => {
               if (confirm("End the session for everyone?")) {
                 const response = await fetch(
@@ -518,7 +535,7 @@ export function RoomScreen({
               }
             }}
           >
-            End for all
+            <ToolbarIcon name="power" />End for all
           </button>
         ) : null}
       </footer>
