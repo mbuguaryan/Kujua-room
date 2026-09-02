@@ -21,8 +21,8 @@ export function HostLogin() {
       setLoading(false);
       return;
     }
-    router.push(`/r/mens-conference?host=1&access=${access}`);
+    router.push(`/host?access=${access}`);
   }
   async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); await submit(new FormData(event.currentTarget)); }
-  return <main className="join-screen"><form className="join-card" onSubmit={(event)=>void handleSubmit(event)}><div className="brand-center"><div className="brand-mark">K</div></div><h1>Host sign in</h1><p className="sub">Kujua Room · Men&apos;s Conference · {access === "public" ? "Public session" : "Private session"}</p><label className="form-label" htmlFor="email">Email</label><input className="form-input" id="email" name="email" type="email" autoComplete="email" required/><label className="form-label spaced" htmlFor="password">Password</label><input className="form-input" id="password" name="password" type="password" autoComplete="current-password" required/><button type="submit" className="btn primary spaced" disabled={loading}>{loading?"Signing in…":"Sign in"}</button>{error?<p className="form-error" role="alert">{error}</p>:null}</form></main>;
+  return <main className="join-screen"><form className="join-card" onSubmit={(event)=>void handleSubmit(event)}><div className="brand-center"><div className="brand-mark">K</div></div><h1>Host sign in</h1><p className="sub">Kujua Room · Host workspace</p><label className="form-label" htmlFor="email">Email</label><input className="form-input" id="email" name="email" type="email" autoComplete="email" required/><label className="form-label spaced" htmlFor="password">Password</label><input className="form-input" id="password" name="password" type="password" autoComplete="current-password" required/><button type="submit" className="btn primary spaced" disabled={loading}>{loading?"Signing in…":"Sign in"}</button>{error?<p className="form-error" role="alert">{error}</p>:null}</form></main>;
 }
