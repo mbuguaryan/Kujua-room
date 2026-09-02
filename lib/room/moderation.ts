@@ -6,6 +6,24 @@ import { mediaAdapter } from "@/lib/media";
 import { audit } from "@/lib/room/audit";
 
 type Admin = SupabaseClient<Database>;
+type ModerationRoleAction =
+  | "promote_moderator"
+  | "demote_moderator"
+  | "promote_speaker"
+  | "demote_speaker";
+
+function moderationRoleAction(
+  previousRole: RoomRole,
+  nextRole: RoomRole,
+): ModerationRoleAction | null {
+  if (previousRole === nextRole) return null;
+  if (nextRole === "moderator") return "promote_moderator";
+  if (previousRole === "moderator") return "demote_moderator";
+  if (nextRole === "speaker") return "promote_speaker";
+  if (previousRole === "speaker") return "demote_speaker";
+  return null;
+}
+
 export async function changeSessionRole(input: {
   admin: Admin;
   actorUserId: string;
@@ -46,6 +64,14 @@ export async function changeSessionRole(input: {
     });
   }
 
+  const now = new Date().toISOString();
+  const action = moderationRoleAction(previousRole, input.nextRole);
+  const metadata = {
+    previous_role: previousRole,
+    permanent: Boolean(input.permanent),
+    provider_role_synced: shouldSyncProviderRole,
+  };
+
   try {
     const { error } = await input.admin
       .from("session_participants")
@@ -53,6 +79,7 @@ export async function changeSessionRole(input: {
       .eq("session_id", input.sessionId)
       .eq("user_id", input.targetUserId);
     if (error) throw error;
+
     if (input.permanent) {
       const { error: memberError } = await input.admin
         .from("room_members")
@@ -61,12 +88,46 @@ export async function changeSessionRole(input: {
         .eq("user_id", input.targetUserId);
       if (memberError) throw memberError;
     }
+
+    if (action) {
+      const { error: eventError } = await input.admin
+        .from("moderation_events")
+        .insert({
+          actor_user_id: input.actorUserId,
+          target_user_id: input.targetUserId,
+          session_id: input.sessionId,
+          action,
+          metadata,
+          created_at: now,
+        });
+      if (eventError) throw eventError;
+
+      await audit(input.admin, {
+        actor_user_id: input.actorUserId,
+        target_user_id: input.targetUserId,
+        room_id: input.roomId,
+        session_id: input.sessionId,
+        action,
+        metadata,
+        created_at: now,
+      });
+    }
   } catch (error) {
     await input.admin
       .from("session_participants")
       .update({ current_role: previousRole })
       .eq("session_id", input.sessionId)
       .eq("user_id", input.targetUserId);
+
+    if (input.permanent) {
+      await input.admin
+        .from("room_members")
+        .update({ role: previousRole })
+        .eq("room_id", input.roomId)
+        .eq("user_id", input.targetUserId)
+        .catch(() => undefined);
+    }
+
     if (
       shouldSyncProviderRole &&
       providerParticipantId &&
@@ -82,32 +143,6 @@ export async function changeSessionRole(input: {
     }
     throw error;
   }
-  const now = new Date().toISOString();
-  const action = `role_changed_to_${input.nextRole}`;
-  const metadata = {
-    previous_role: previousRole,
-    permanent: Boolean(input.permanent),
-    provider_role_synced: shouldSyncProviderRole,
-  };
-  const { error: eventError } = await input.admin
-    .from("moderation_events")
-    .insert({
-      actor_user_id: input.actorUserId,
-      target_user_id: input.targetUserId,
-      session_id: input.sessionId,
-      action,
-      metadata,
-      created_at: now,
-    });
-  if (eventError) throw eventError;
-  await audit(input.admin, {
-    actor_user_id: input.actorUserId,
-    target_user_id: input.targetUserId,
-    room_id: input.roomId,
-    session_id: input.sessionId,
-    action,
-    metadata,
-    created_at: now,
-  });
+
   return { previousRole, currentRole: input.nextRole };
 }
