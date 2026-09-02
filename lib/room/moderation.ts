@@ -124,8 +124,7 @@ export async function changeSessionRole(input: {
         .from("room_members")
         .update({ role: previousRole })
         .eq("room_id", input.roomId)
-        .eq("user_id", input.targetUserId)
-        .catch(() => undefined);
+        .eq("user_id", input.targetUserId);
     }
 
     if (
