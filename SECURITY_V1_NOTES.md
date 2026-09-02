@@ -18,6 +18,7 @@
 - Media Session metadata is published to the OS where supported, and the experimental Audio Session API is set to `play-and-record` where available.
 - On return from background/offline state, RealtimeKit is given a reconnect grace period. If the media/socket connection did not recover, the page reloads into the existing room recovery flow.
 - Recovery obtains a fresh media token, reuses the existing client instance identity, restores the session, and starts recovered users muted for privacy.
+- The voice-activity reporter flushes a final keepalive when recently observed speech is backgrounded and reconciles active speakers immediately on resume, reducing false inactivity shutdowns around mobile suspension.
 - The session end countdown remains server-authoritative because it is recalculated from `endsAt - Date.now()` after browser suspension rather than incremented locally.
 - A mobile operating system can still terminate a browser process. Web code cannot guarantee live WebRTC playback/microphone after process termination; that would require a native mobile client.
 
