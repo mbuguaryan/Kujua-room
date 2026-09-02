@@ -40,12 +40,19 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json({ data: { room_id: room.id, room_name: room.name, role: "host", session_id: session?.id, session_status: session?.status, access_mode: body.accessMode ?? room.access_mode } });
     }
+
+    // Vercel overwrites x-forwarded-for with the public client IP. Rate-limit
+    // before anonymous Auth user creation so clearing cookies/rotating anonymous
+    // identities cannot bypass the join limiter or create unbounded Auth users.
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    await rateLimit("room-join-ip", clientIp, 20, 300);
+
     if (!user) {
       const result = await supabase.auth.signInAnonymously();
       if (result.error || !result.data.user) throw new Error("Anonymous authentication failed");
       user = result.data.user;
     }
-    await rateLimit("room-join", `${request.headers.get("x-forwarded-for") ?? "unknown"}:${user.id}`, 10, 300);
+    await rateLimit("room-join-user", user.id, 10, 300);
     if (!body.inviteToken) {
       const { data: publicRoom } = await admin.from("rooms").select("id,name,access_mode").eq("slug", body.slug).eq("status", "active").eq("access_mode", "public").maybeSingle();
       if (!publicRoom) return NextResponse.json({ error: "An invitation is required for this room." }, { status: 403 });

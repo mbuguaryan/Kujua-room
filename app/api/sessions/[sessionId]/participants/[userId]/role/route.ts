@@ -12,15 +12,25 @@ export async function PUT(
   try {
     const { sessionId, userId } = await params;
     const input = roleChangeSchema.parse(await request.json());
-    const { user, session, admin } = await sessionAuthority(sessionId, [
+    const { user, member, session, admin } = await sessionAuthority(sessionId, [
       "host",
       "moderator",
     ]);
+
+    if (input.role === "host")
+      throw new HttpError(403, "The host role cannot be assigned from this endpoint.");
+
+    // Moderators may manage speaking state, but only the host can create other
+    // moderators or make a room-level role change permanent.
     if (
-      input.role === "host" ||
-      (input.role === "moderator" && user.id === userId)
+      member.role !== "host" &&
+      (input.role === "moderator" || Boolean(input.permanent))
     )
-      throw new HttpError(403, "This role change is not permitted.");
+      throw new HttpError(403, "Only the host can make this role change.");
+
+    if (input.role === "moderator" && user.id === userId)
+      throw new HttpError(403, "You cannot promote yourself to moderator.");
+
     await rateLimit("moderation", user.id, 60, 60);
     await changeSessionRole({
       admin,
