@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Database } from "@/lib/supabase/database.types";
 import { startSessionSchema, uuidSchema } from "@/lib/validation/schemas";
 import { apiError } from "@/lib/security/http";
 import { rateLimit } from "@/lib/security/rate-limit";
@@ -8,6 +9,9 @@ import { mediaAdapter } from "@/lib/media";
 import { audit } from "@/lib/room/audit";
 
 export const runtime = "nodejs";
+
+type SessionInsert = Database["public"]["Tables"]["sessions"]["Insert"];
+type SessionInsertWithGoals = SessionInsert & { goals?: string | null };
 
 export async function POST(
   request: NextRequest,
@@ -64,21 +68,22 @@ export async function POST(
 
     const now = new Date().toISOString();
     const meeting = await mediaAdapter().createMeeting(input.title);
+    const sessionInsert: SessionInsertWithGoals = {
+      room_id: roomId,
+      title: input.title,
+      agenda: input.agenda || null,
+      goals: input.goals || null,
+      status: "live",
+      created_by: user.id,
+      created_at: now,
+      started_at: now,
+      media_provider: "cloudflare-realtimekit",
+      provider_meeting_id: meeting.meetingId,
+      media_created_at: now,
+    };
     const { data: session, error: sessionError } = await admin
       .from("sessions")
-      .insert({
-        room_id: roomId,
-        title: input.title,
-        agenda: input.agenda || null,
-        goals: input.goals || null,
-        status: "live",
-        created_by: user.id,
-        created_at: now,
-        started_at: now,
-        media_provider: "cloudflare-realtimekit",
-        provider_meeting_id: meeting.meetingId,
-        media_created_at: now,
-      })
+      .insert(sessionInsert as SessionInsert)
       .select("id,title,status")
       .single();
 
