@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "prebuild": "vitest run tests/microphone-state.test.ts tests/participant-tile.test.tsx",
+    "prebuild": "vitest run tests/microphone-state.test.ts tests/microphone-wiring.test.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
