@@ -54,15 +54,30 @@ export function RoomScreen({
     bootstrap.member.role,
     bootstrap.member.displayName,
   );
+  const selfAudioEnabled = Boolean(media.meeting?.self.audioEnabled);
+  const microphoneUnlocked = Boolean(
+    media.connected &&
+      (media.stageStatus === "ON_STAGE" ||
+        (effectiveRole !== "audience" && media.canEnableSelfAudio())),
+  );
+  const canModerate =
+    bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
+  const canRaiseHand =
+    effectiveRole === "audience" &&
+    media.stageStatus !== "ON_STAGE" &&
+    media.stageStatus !== "ACCEPTED_TO_JOIN_STAGE";
+
   useVoiceActivityReporter({
     sessionId: bootstrap.session.id,
     meeting: media.meeting,
     connected: media.connected,
-    enabled: effectiveRole !== "audience",
+    enabled: microphoneUnlocked,
   });
+
   const connectMedia = media.connect;
   const grantStageAccess = media.grantStageAccess;
   const denyStageAccess = media.denyStageAccess;
+  const removeStageAccess = media.removeStageAccess;
   const joinApprovedStage = media.joinApprovedStage;
   const router = useRouter();
   const privateNotes = usePrivateNotes(
@@ -74,8 +89,6 @@ export function RoomScreen({
     userId: bootstrap.member.userId,
     open: panel === "chat",
   });
-  const canModerate =
-    bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
 
   const toggleChat = useCallback(() => {
     const opening = panel !== "chat";
@@ -221,6 +234,29 @@ export function RoomScreen({
   }, [bootstrap.member.userId, bootstrap.session.id]);
 
   useEffect(() => {
+    if (canModerate || media.stageStatus !== "ACCEPTED_TO_JOIN_STAGE") return;
+    let cancelled = false;
+    void joinApprovedStage()
+      .then(() => {
+        if (cancelled) return;
+        setEffectiveRole("speaker");
+        setHandPending(false);
+        setNotice("Speaking access approved. Your microphone is ready to unmute.");
+      })
+      .catch((cause) => {
+        if (cancelled) return;
+        setNotice(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to connect your microphone to the stage.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canModerate, joinApprovedStage, media.stageStatus]);
+
+  useEffect(() => {
     let stopped = false;
 
     const syncStage = async () => {
@@ -240,18 +276,9 @@ export function RoomScreen({
           return;
         }
 
-        const status = body.request?.status;
-        setHandPending(status === "pending");
-        if (status === "approved" && effectiveRole === "audience") {
-          await joinApprovedStage();
-          if (stopped) return;
-          setEffectiveRole("speaker");
-          setNotice("You are approved to speak. Your microphone is ready.");
-        }
+        setHandPending(body.request?.status === "pending");
       } catch (cause) {
-        if (!stopped && effectiveRole === "audience") {
-          console.error("Unable to join approved stage", cause);
-        }
+        if (!stopped) console.error("Unable to sync stage request", cause);
       }
     };
 
@@ -261,13 +288,7 @@ export function RoomScreen({
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [
-    bootstrap.session.id,
-    canModerate,
-    effectiveRole,
-    joinApprovedStage,
-    stageRevision,
-  ]);
+  }, [bootstrap.session.id, canModerate, stageRevision]);
 
   const leave = useCallback(async () => {
     await media.leave();
@@ -289,7 +310,7 @@ export function RoomScreen({
         );
         if (!response.ok) throw new Error("Mute authorization failed.");
         await media.muteParticipant(userId);
-        setNotice("Participant muted. They may unmute if still allowed to speak.");
+        setNotice("Participant muted.");
       } catch (cause) {
         setNotice(
           cause instanceof Error ? cause.message : "Unable to mute participant.",
@@ -306,6 +327,14 @@ export function RoomScreen({
     async (userId: string) => {
       const meeting = media.meeting;
       if (!meeting) throw new Error("Live audio is not connected.");
+      const model = media.participants.find((item) => item.id === userId);
+      const canReceiveUnmuteRequest = Boolean(
+        model &&
+          (model.stageStatus === "ON_STAGE" || model.role !== "audience"),
+      );
+      if (!canReceiveUnmuteRequest)
+        throw new Error("Approve speaking access before requesting unmute.");
+
       const participant = Array.from(meeting.participants.joined.values()).find(
         (item) => item.customParticipantId === userId || item.id === userId,
       );
@@ -319,14 +348,14 @@ export function RoomScreen({
       );
       setNotice("Unmute request sent to participant.");
     },
-    [media.meeting],
+    [media.meeting, media.participants],
   );
 
   const revokeSpeaker = useCallback(
     async (userId: string) => {
       setModerationBusy(userId);
       try {
-        await denyStageAccess(userId);
+        await removeStageAccess(userId);
         const response = await fetch(
           `/api/sessions/${bootstrap.session.id}/participants/${userId}/role`,
           {
@@ -337,7 +366,7 @@ export function RoomScreen({
         );
         if (!response.ok)
           throw new Error("Unable to revoke speaking permission.");
-        setNotice("Speaking permission revoked.");
+        setNotice("Speaking permission revoked. Microphone locked.");
       } catch (cause) {
         setNotice(
           cause instanceof Error
@@ -348,7 +377,7 @@ export function RoomScreen({
         setModerationBusy(undefined);
       }
     },
-    [bootstrap.session.id, denyStageAccess],
+    [bootstrap.session.id, removeStageAccess],
   );
 
   const muteAll = useCallback(async () => {
@@ -371,10 +400,10 @@ export function RoomScreen({
   }, [bootstrap.session.id, media]);
 
   const toggleHand = useCallback(async () => {
-    if (handBusy) return;
+    if (handBusy || !canRaiseHand) return;
     setHandBusy(true);
+    const action = handPending ? "cancel" : "raise";
     try {
-      const action = handPending ? "cancel" : "raise";
       const response = await fetch(
         `/api/sessions/${bootstrap.session.id}/stage`,
         {
@@ -389,28 +418,67 @@ export function RoomScreen({
         };
         throw new Error(body.error ?? "Unable to update your hand.");
       }
+
+      if (action === "raise") {
+        try {
+          await media.requestStageAccess();
+        } catch (cause) {
+          await fetch(`/api/sessions/${bootstrap.session.id}/stage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "cancel" }),
+          }).catch(() => undefined);
+          throw cause;
+        }
+      } else {
+        await media.cancelStageAccessRequest().catch((cause) =>
+          console.warn("Unable to cancel provider stage request", cause),
+        );
+      }
+
       setHandPending(action === "raise");
       setNotice(
         action === "raise"
-          ? "Hand raised. The host can now approve you to speak."
+          ? "Hand raised. Waiting for host approval to speak."
           : "Hand lowered. Speaking request cancelled.",
       );
     } catch (cause) {
+      setHandPending(false);
       setNotice(
         cause instanceof Error ? cause.message : "Unable to update your hand.",
       );
     } finally {
       setHandBusy(false);
     }
-  }, [bootstrap.session.id, handBusy, handPending]);
+  }, [
+    bootstrap.session.id,
+    canRaiseHand,
+    handBusy,
+    handPending,
+    media,
+  ]);
 
-  const requestToSpeakFromMic = useCallback(() => {
-    if (handPending) {
-      setNotice("Your hand is already raised. Waiting for host approval.");
+  const toggleSelfMicrophone = useCallback(async () => {
+    if (!microphoneUnlocked) {
+      if (media.stageStatus === "ACCEPTED_TO_JOIN_STAGE") {
+        setNotice("Speaking access is connecting. Microphone will unlock on stage.");
+      } else if (handPending) {
+        setNotice("Microphone locked. Your hand is raised; wait for host approval.");
+      } else {
+        setNotice("Microphone locked. Raise your hand to request speaking access.");
+      }
       return;
     }
-    void toggleHand();
-  }, [handPending, toggleHand]);
+    try {
+      await media.toggleAudio();
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to change microphone state.",
+      );
+    }
+  }, [handPending, media, microphoneUnlocked]);
 
   const resolveStage = useCallback(
     async (requestId: string, action: "approve" | "decline") => {
@@ -453,15 +521,17 @@ export function RoomScreen({
         );
         setNotice(
           action === "approve"
-            ? "Participant approved. Their microphone is now available."
+            ? "Participant approved. Waiting for their stage connection."
             : "Request declined.",
         );
       } catch (cause) {
         if (providerGranted) {
-          await denyStageAccess(request.userId).catch(() => undefined);
+          await removeStageAccess(request.userId).catch(() => undefined);
         }
         setNotice(
-          cause instanceof Error ? cause.message : "Unable to resolve stage request.",
+          cause instanceof Error
+            ? cause.message
+            : "Unable to resolve stage request.",
         );
       } finally {
         setStageBusyId(undefined);
@@ -471,6 +541,7 @@ export function RoomScreen({
       bootstrap.session.id,
       denyStageAccess,
       grantStageAccess,
+      removeStageAccess,
       stageRequests,
     ],
   );
@@ -522,16 +593,12 @@ export function RoomScreen({
     const key = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (event.key.toLowerCase() === "m") {
-        if (effectiveRole === "audience") requestToSpeakFromMic();
-        else void media.toggleAudio();
-      }
-      if (event.key.toLowerCase() === "h" && effectiveRole === "audience")
-        void toggleHand();
+      if (event.key.toLowerCase() === "m") void toggleSelfMicrophone();
+      if (event.key.toLowerCase() === "h" && canRaiseHand) void toggleHand();
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
-  }, [effectiveRole, media, requestToSpeakFromMic, toggleHand]);
+  }, [canRaiseHand, toggleHand, toggleSelfMicrophone]);
 
   useEffect(() => {
     let lock: WakeLockSentinel | null = null;
@@ -551,9 +618,6 @@ export function RoomScreen({
       void lock?.release();
     };
   }, []);
-
-  const selfAudioEnabled = Boolean(media.meeting?.self.audioEnabled);
-  const audienceMic = effectiveRole === "audience";
 
   return (
     <main className="call-screen">
@@ -725,7 +789,7 @@ export function RoomScreen({
           </button>
         ) : null}
 
-        {audienceMic ? (
+        {canRaiseHand ? (
           <button
             className="control hand-request-control"
             aria-label={handPending ? "Lower hand" : "Raise hand to speak"}
@@ -740,33 +804,28 @@ export function RoomScreen({
         ) : null}
 
         <button
-          className={`control${audienceMic ? " audience-mic-request" : ""}`}
+          className={`control${microphoneUnlocked ? "" : " locked-mic-control"}`}
           aria-label="Mute or unmute microphone"
           title={
-            audienceMic
-              ? handPending
-                ? "Speaking request sent — waiting for host approval"
-                : "Request to speak"
-              : selfAudioEnabled
+            microphoneUnlocked
+              ? selfAudioEnabled
                 ? "Mute microphone"
                 : "Unmute microphone"
+              : media.stageStatus === "ACCEPTED_TO_JOIN_STAGE"
+                ? "Microphone connecting to stage"
+                : "Microphone locked until host approval"
           }
-          aria-pressed={audienceMic ? handPending : !selfAudioEnabled}
-          data-locked={audienceMic ? "true" : "false"}
-          disabled={audienceMic && handBusy}
-          onClick={() => {
-            if (audienceMic) requestToSpeakFromMic();
-            else void media.toggleAudio();
-          }}
+          aria-pressed={microphoneUnlocked ? !selfAudioEnabled : true}
+          aria-disabled={!microphoneUnlocked}
+          data-locked={microphoneUnlocked ? "false" : "true"}
+          onClick={() => void toggleSelfMicrophone()}
         >
-          <ToolbarIcon name={selfAudioEnabled && !audienceMic ? "mic" : "mic-off"} />
-          {audienceMic
-            ? handPending
-              ? "Requested"
-              : "Request"
-            : selfAudioEnabled
+          <ToolbarIcon name={selfAudioEnabled ? "mic" : "mic-off"} />
+          {microphoneUnlocked
+            ? selfAudioEnabled
               ? "Mute"
-              : "Unmute"}
+              : "Unmute"
+            : "Locked"}
         </button>
 
         {bootstrap.member.role === "host" ? (
