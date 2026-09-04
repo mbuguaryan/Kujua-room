@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { RoomBootstrap, RoomRole, SessionNotes } from "@/types/room";
+import type { RoomBootstrap, SessionNotes } from "@/types/room";
 import { ParticipantTile } from "./ParticipantTile";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { SessionNotesPanel } from "./SessionNotesPanel";
@@ -38,9 +38,6 @@ export function RoomScreen({
   >(null);
   const [notes, setNotes] = useState<SessionNotes>(bootstrap.notes);
   const [endsAt, setEndsAt] = useState(bootstrap.session.endsAt);
-  const [effectiveRole, setEffectiveRole] = useState<RoomRole>(
-    bootstrap.member.role,
-  );
   const [handPending, setHandPending] = useState(false);
   const [handBusy, setHandBusy] = useState(false);
   const [stageRequests, setStageRequests] = useState<StageRequestItem[]>([]);
@@ -58,12 +55,12 @@ export function RoomScreen({
   const microphoneUnlocked = Boolean(
     media.connected &&
       (media.stageStatus === "ON_STAGE" ||
-        (effectiveRole !== "audience" && media.canEnableSelfAudio())),
+        (bootstrap.member.role !== "audience" && media.canEnableSelfAudio())),
   );
   const canModerate =
     bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
   const canRaiseHand =
-    effectiveRole === "audience" &&
+    bootstrap.member.role === "audience" &&
     media.stageStatus !== "ON_STAGE" &&
     media.stageStatus !== "ACCEPTED_TO_JOIN_STAGE";
 
@@ -78,7 +75,6 @@ export function RoomScreen({
   const grantStageAccess = media.grantStageAccess;
   const denyStageAccess = media.denyStageAccess;
   const removeStageAccess = media.removeStageAccess;
-  const joinApprovedStage = media.joinApprovedStage;
   const router = useRouter();
   const privateNotes = usePrivateNotes(
     bootstrap.session.id,
@@ -210,51 +206,24 @@ export function RoomScreen({
         },
         () => setStageRevision((value) => value + 1),
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "session_participants",
-          filter: `session_id=eq.${bootstrap.session.id}`,
-        },
-        ({ new: value }) => {
-          const row = value as Record<string, unknown>;
-          if (
-            row.user_id === bootstrap.member.userId &&
-            typeof row.current_role === "string"
-          )
-            setEffectiveRole(row.current_role as RoomRole);
-        },
-      )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [bootstrap.member.userId, bootstrap.session.id]);
+  }, [bootstrap.session.id]);
 
   useEffect(() => {
-    if (canModerate || media.stageStatus !== "ACCEPTED_TO_JOIN_STAGE") return;
-    let cancelled = false;
-    void joinApprovedStage()
-      .then(() => {
-        if (cancelled) return;
-        setEffectiveRole("speaker");
-        setHandPending(false);
-        setNotice("Speaking access approved. Your microphone is ready to unmute.");
-      })
-      .catch((cause) => {
-        if (cancelled) return;
-        setNotice(
-          cause instanceof Error
-            ? cause.message
-            : "Unable to connect your microphone to the stage.",
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canModerate, joinApprovedStage, media.stageStatus]);
+    if (canModerate) return;
+    if (media.stageStatus === "ACCEPTED_TO_JOIN_STAGE") {
+      setHandPending(false);
+      setNotice("Speaking access approved. RealtimeKit is moving you on stage.");
+      return;
+    }
+    if (media.stageStatus === "ON_STAGE") {
+      setHandPending(false);
+      setNotice("Speaking access active. Your microphone is ready to unmute.");
+    }
+  }, [canModerate, media.stageStatus]);
 
   useEffect(() => {
     let stopped = false;
@@ -356,16 +325,6 @@ export function RoomScreen({
       setModerationBusy(userId);
       try {
         await removeStageAccess(userId);
-        const response = await fetch(
-          `/api/sessions/${bootstrap.session.id}/participants/${userId}/role`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ role: "audience", permanent: false }),
-          },
-        );
-        if (!response.ok)
-          throw new Error("Unable to revoke speaking permission.");
         setNotice("Speaking permission revoked. Microphone locked.");
       } catch (cause) {
         setNotice(
@@ -377,7 +336,7 @@ export function RoomScreen({
         setModerationBusy(undefined);
       }
     },
-    [bootstrap.session.id, removeStageAccess],
+    [removeStageAccess],
   );
 
   const muteAll = useCallback(async () => {
@@ -521,7 +480,7 @@ export function RoomScreen({
         );
         setNotice(
           action === "approve"
-            ? "Participant approved. Waiting for their stage connection."
+            ? "Participant approved. RealtimeKit is moving them on stage."
             : "Request declined.",
         );
       } catch (cause) {
