@@ -3,7 +3,6 @@ import { sessionAuthority, HttpError } from "@/lib/security/auth";
 import { apiError } from "@/lib/security/http";
 import { stageRequestSchema } from "@/lib/validation/schemas";
 import { rateLimit } from "@/lib/security/rate-limit";
-import { changeSessionRole } from "@/lib/room/moderation";
 import { audit } from "@/lib/room/audit";
 
 export const runtime = "nodejs";
@@ -158,26 +157,11 @@ export async function POST(
       .single();
     if (error) throw error;
 
-    if (status === "approved") {
-      try {
-        await changeSessionRole({
-          admin: privileged.admin,
-          actorUserId: privileged.user.id,
-          targetUserId: stage.user_id,
-          sessionId,
-          roomId: privileged.session.room_id,
-          meetingId: privileged.session.provider_meeting_id,
-          nextRole: "speaker",
-          syncProviderRole: false,
-        });
-      } catch (promotionError) {
-        await privileged.admin
-          .from("stage_requests")
-          .update({ status: "pending", resolved_by: null, resolved_at: null })
-          .eq("id", input.requestId);
-        throw promotionError;
-      }
-    } else {
+    // RealtimeKit owns temporary speaking state. We deliberately do not
+    // promote session_participants.current_role here. The participant remains
+    // audience in our authorization model while RealtimeKit stageStatus
+    // controls whether the microphone is available.
+    if (status === "declined") {
       const now = new Date().toISOString();
       await privileged.admin.from("moderation_events").insert({
         actor_user_id: privileged.user.id,
