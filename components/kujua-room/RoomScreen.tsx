@@ -246,7 +246,7 @@ export function RoomScreen({
           await joinApprovedStage();
           if (stopped) return;
           setEffectiveRole("speaker");
-          setNotice("You are now on stage. Your microphone is on and ready.");
+          setNotice("You are approved to speak. Your microphone is ready.");
         }
       } catch (cause) {
         if (!stopped && effectiveRole === "audience") {
@@ -294,11 +294,32 @@ export function RoomScreen({
         setNotice(
           cause instanceof Error ? cause.message : "Unable to mute participant.",
         );
+        throw cause;
       } finally {
         setModerationBusy(undefined);
       }
     },
     [bootstrap.session.id, media],
+  );
+
+  const requestParticipantUnmute = useCallback(
+    async (userId: string) => {
+      const meeting = media.meeting;
+      if (!meeting) throw new Error("Live audio is not connected.");
+      const participant = Array.from(meeting.participants.joined.values()).find(
+        (item) => item.customParticipantId === userId || item.id === userId,
+      );
+      if (!participant)
+        throw new Error("Participant is no longer connected to the live room.");
+
+      await meeting.participants.broadcastMessage(
+        "KUJUA_REQUEST_UNMUTE",
+        { message: "The host asked you to unmute your microphone." },
+        { participantIds: [participant.id] },
+      );
+      setNotice("Unmute request sent to participant.");
+    },
+    [media.meeting],
   );
 
   const revokeSpeaker = useCallback(
@@ -370,7 +391,9 @@ export function RoomScreen({
       }
       setHandPending(action === "raise");
       setNotice(
-        action === "raise" ? "Request to speak sent." : "Request cancelled.",
+        action === "raise"
+          ? "Hand raised. The host can now approve you to speak."
+          : "Hand lowered. Speaking request cancelled.",
       );
     } catch (cause) {
       setNotice(
@@ -380,6 +403,14 @@ export function RoomScreen({
       setHandBusy(false);
     }
   }, [bootstrap.session.id, handBusy, handPending]);
+
+  const requestToSpeakFromMic = useCallback(() => {
+    if (handPending) {
+      setNotice("Your hand is already raised. Waiting for host approval.");
+      return;
+    }
+    void toggleHand();
+  }, [handPending, toggleHand]);
 
   const resolveStage = useCallback(
     async (requestId: string, action: "approve" | "decline") => {
@@ -491,14 +522,16 @@ export function RoomScreen({
     const key = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (event.key.toLowerCase() === "m" && effectiveRole !== "audience")
-        void media.toggleAudio();
+      if (event.key.toLowerCase() === "m") {
+        if (effectiveRole === "audience") requestToSpeakFromMic();
+        else void media.toggleAudio();
+      }
       if (event.key.toLowerCase() === "h" && effectiveRole === "audience")
         void toggleHand();
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
-  }, [effectiveRole, media, toggleHand]);
+  }, [effectiveRole, media, requestToSpeakFromMic, toggleHand]);
 
   useEffect(() => {
     let lock: WakeLockSentinel | null = null;
@@ -518,6 +551,9 @@ export function RoomScreen({
       void lock?.release();
     };
   }, []);
+
+  const selfAudioEnabled = Boolean(media.meeting?.self.audioEnabled);
+  const audienceMic = effectiveRole === "audience";
 
   return (
     <main className="call-screen">
@@ -609,7 +645,7 @@ export function RoomScreen({
       ) : null}
 
       <div className="coaching-banner">
-        Coaching with <b>Keith Muoki</b> ·{" "}
+        For Private Coaching with <b>Keith Muoki</b> ·{" "}
         <a
           href="https://wa.me/254705960183"
           target="_blank"
@@ -656,7 +692,13 @@ export function RoomScreen({
 
       <section className="audio-grid" aria-label="Room participants">
         {media.participants.map((participant) => (
-          <ParticipantTile key={participant.id} participant={participant} />
+          <ParticipantTile
+            key={participant.id}
+            participant={participant}
+            canModerate={canModerate}
+            onMute={muteParticipant}
+            onRequestUnmute={requestParticipantUnmute}
+          />
         ))}
       </section>
 
@@ -682,36 +724,50 @@ export function RoomScreen({
             <ToolbarIcon name="volume-x" />Mute All
           </button>
         ) : null}
-        {effectiveRole !== "audience" ? (
+
+        {audienceMic ? (
           <button
-            className="control"
-            aria-label="Mute or unmute microphone"
-            title={
-              media.meeting?.self.audioEnabled
-                ? "Mute microphone"
-                : "Unmute microphone"
-            }
-            aria-pressed={media.meeting ? !media.meeting.self.audioEnabled : true}
-            onClick={() => void media.toggleAudio()}
-          >
-            <ToolbarIcon
-              name={media.meeting?.self.audioEnabled ? "mic" : "mic-off"}
-            />
-            {media.meeting?.self.audioEnabled ? "Mute" : "Unmute"}
-          </button>
-        ) : (
-          <button
-            className="control"
-            aria-label={handPending ? "Lower hand" : "Raise hand"}
-            title={handPending ? "Lower hand" : "Raise hand"}
+            className="control hand-request-control"
+            aria-label={handPending ? "Lower hand" : "Raise hand to speak"}
+            title={handPending ? "Lower hand" : "Raise hand to speak"}
             aria-pressed={handPending}
             disabled={handBusy}
             onClick={() => void toggleHand()}
           >
             <ToolbarIcon name="hand" />
-            {handPending ? "Lower" : "Raise"}
+            {handPending ? "Lower" : "Ask"}
           </button>
-        )}
+        ) : null}
+
+        <button
+          className={`control${audienceMic ? " audience-mic-request" : ""}`}
+          aria-label="Mute or unmute microphone"
+          title={
+            audienceMic
+              ? handPending
+                ? "Speaking request sent — waiting for host approval"
+                : "Request to speak"
+              : selfAudioEnabled
+                ? "Mute microphone"
+                : "Unmute microphone"
+          }
+          aria-pressed={audienceMic ? handPending : !selfAudioEnabled}
+          data-locked={audienceMic ? "true" : "false"}
+          disabled={audienceMic && handBusy}
+          onClick={() => {
+            if (audienceMic) requestToSpeakFromMic();
+            else void media.toggleAudio();
+          }}
+        >
+          <ToolbarIcon name={selfAudioEnabled && !audienceMic ? "mic" : "mic-off"} />
+          {audienceMic
+            ? handPending
+              ? "Requested"
+              : "Request"
+            : selfAudioEnabled
+              ? "Mute"
+              : "Unmute"}
+        </button>
 
         {bootstrap.member.role === "host" ? (
           <button
