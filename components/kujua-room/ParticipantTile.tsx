@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type { Participant } from "@/types/room";
+import { isRemoteMicrophoneAvailable } from "@/lib/room/microphone-state";
 
 const palette = [
   "#C1622D",
@@ -84,6 +85,12 @@ export function ParticipantTile({
   const canModerateParticipant = Boolean(
     canModerate && !participant.local && participant.role !== "host",
   );
+  const remoteMicrophoneAvailable = isRemoteMicrophoneAvailable({
+    role: participant.role,
+    stageStatus: participant.stageStatus,
+  });
+  const canControlRemoteAudio =
+    canModerateParticipant && remoteMicrophoneAvailable;
 
   useEffect(() => {
     if (!controlNotice) return;
@@ -107,7 +114,7 @@ export function ParticipantTile({
   }, [meeting, participant.local]);
 
   const controlRemoteAudio = async () => {
-    if (!canModerateParticipant || busy) return;
+    if (!canControlRemoteAudio || busy) return;
 
     setBusy(true);
     setControlNotice("");
@@ -136,20 +143,33 @@ export function ParticipantTile({
     if (!meeting) return;
     setPromptError("");
     try {
+      const canProduceAudio = String(
+        meeting.self.permissions.canProduceAudio ?? "",
+      ).toUpperCase();
+      const stageStatus = String(meeting.stage.status ?? "").toUpperCase();
+      if (canProduceAudio !== "ALLOWED" && stageStatus !== "ON_STAGE") {
+        throw new Error("Speaking access is not active yet.");
+      }
       await meeting.self.enableAudio();
       setUnmutePrompt(false);
-    } catch {
-      setPromptError("Speaking access is not active yet.");
+    } catch (cause) {
+      setPromptError(
+        cause instanceof Error
+          ? cause.message
+          : "Speaking access is not active yet.",
+      );
     }
   };
 
-  const micLabel = canModerateParticipant
+  const micLabel = canControlRemoteAudio
     ? participant.muted
       ? `Ask ${participant.name} to unmute`
       : `Mute ${participant.name}`
-    : participant.muted
-      ? "Muted"
-      : "Microphone on";
+    : canModerateParticipant && !remoteMicrophoneAvailable
+      ? `${participant.name}'s microphone is locked until speaking access is approved`
+      : participant.muted
+        ? "Muted"
+        : "Microphone on";
 
   return (
     <article
@@ -157,7 +177,9 @@ export function ParticipantTile({
       data-testid={`participant-${participant.id}`}
     >
       <div className="tile-badges">
-        {participant.handRaised ? <span aria-label="Wants to speak">✋</span> : null}
+        {participant.handRaised ? (
+          <span aria-label="Wants to speak">✋</span>
+        ) : null}
         {participant.role === "host" ? <span aria-label="Host">★</span> : null}
       </div>
       <div className="avatar-ring">
@@ -176,19 +198,22 @@ export function ParticipantTile({
       <small>
         {participant.speaking
           ? "Speaking"
-          : participant.muted
-            ? "Muted"
-            : "Connected"}
+          : !remoteMicrophoneAvailable && !participant.local
+            ? "Listening"
+            : participant.muted
+              ? "Muted"
+              : "Connected"}
       </small>
       {participant.role === "moderator" ? (
         <span className="role-tag">Moderator</span>
       ) : null}
 
-      {canModerateParticipant ? (
+      {canControlRemoteAudio ? (
         <button
           type="button"
           className="participant-mic-control"
           data-muted={participant.muted ? "true" : "false"}
+          data-locked="false"
           aria-label={micLabel}
           title={micLabel}
           disabled={busy}
@@ -200,6 +225,11 @@ export function ParticipantTile({
         <span
           className="participant-mic-control participant-mic-indicator"
           data-muted={participant.muted ? "true" : "false"}
+          data-locked={
+            canModerateParticipant && !remoteMicrophoneAvailable
+              ? "true"
+              : "false"
+          }
           aria-label={micLabel}
           title={micLabel}
         >
@@ -214,7 +244,11 @@ export function ParticipantTile({
       ) : null}
 
       {participant.local && unmutePrompt ? (
-        <div className="unmute-request-card" role="alertdialog" aria-live="assertive">
+        <div
+          className="unmute-request-card"
+          role="alertdialog"
+          aria-live="assertive"
+        >
           <strong>Host asked you to unmute</strong>
           <span>Turn your microphone on when you are ready to speak.</span>
           {promptError ? <small>{promptError}</small> : null}
