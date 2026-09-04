@@ -66,6 +66,7 @@ function MicStateIcon({ muted }: { muted: boolean }) {
 export function ParticipantTile({ participant }: { participant: Participant }) {
   const [meeting] = useRealtimeKitClient();
   const [busy, setBusy] = useState(false);
+  const [controlNotice, setControlNotice] = useState("");
   const [unmutePrompt, setUnmutePrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
 
@@ -79,6 +80,12 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
       ),
     [meeting, participant.local, participant.role],
   );
+
+  useEffect(() => {
+    if (!controlNotice) return;
+    const timeout = window.setTimeout(() => setControlNotice(""), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [controlNotice]);
 
   useEffect(() => {
     if (!meeting || !participant.local) return;
@@ -109,9 +116,13 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
   const controlRemoteAudio = async () => {
     if (!meeting || !canModerateParticipant || busy) return;
     const target = findProviderParticipant();
-    if (!target) return;
+    if (!target) {
+      setControlNotice("Participant is no longer connected.");
+      return;
+    }
 
     setBusy(true);
+    setControlNotice("");
     try {
       if (participant.muted) {
         await meeting.participants.broadcastMessage(
@@ -119,6 +130,7 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
           { message: "The host asked you to unmute your microphone." },
           { participantIds: [target.id] },
         );
+        setControlNotice("Unmute request sent.");
         return;
       }
 
@@ -135,6 +147,11 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
       );
       if (!response.ok) throw new Error("Mute authorization failed.");
       await target.disableAudio();
+      setControlNotice("Participant muted.");
+    } catch (cause) {
+      setControlNotice(
+        cause instanceof Error ? cause.message : "Microphone control failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -214,6 +231,12 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
           <MicStateIcon muted={participant.muted} />
         </span>
       )}
+
+      {controlNotice ? (
+        <span className="participant-control-note" role="status">
+          {controlNotice}
+        </span>
+      ) : null}
 
       {participant.local && unmutePrompt ? (
         <div className="unmute-request-card" role="alertdialog" aria-live="assertive">
