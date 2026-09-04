@@ -12,6 +12,10 @@ const realtimeKitHook = readFileSync(
   resolve(process.cwd(), "hooks/useRealtimeKit.ts"),
   "utf8",
 );
+const stageRoute = readFileSync(
+  resolve(process.cwd(), "app/api/sessions/[sessionId]/stage/route.ts"),
+  "utf8",
+);
 
 describe("microphone wiring", () => {
   it("keeps microphone and hand actions separate", () => {
@@ -32,5 +36,11 @@ describe("microphone wiring", () => {
     expect(realtimeKitHook).toContain("canEnableSelfAudio");
     expect(realtimeKitHook).toContain('currentStage === "ON_STAGE"');
     expect(realtimeKitHook).toContain('providerPermission === "ALLOWED"');
+  });
+
+  it("keeps temporary speaking access in RealtimeKit instead of the database role", () => {
+    expect(stageRoute).not.toContain("changeSessionRole");
+    expect(stageRoute).toContain("RealtimeKit owns temporary speaking state");
+    expect(roomScreen).not.toContain("joinApprovedStage");
   });
 });
