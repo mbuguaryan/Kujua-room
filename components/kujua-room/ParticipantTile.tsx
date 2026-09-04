@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type { Participant } from "@/types/room";
-import { readRecoveryState } from "@/lib/room/recovery";
 
 const palette = [
   "#C1622D",
@@ -63,22 +62,27 @@ function MicStateIcon({ muted }: { muted: boolean }) {
   );
 }
 
-export function ParticipantTile({ participant }: { participant: Participant }) {
+type ParticipantTileProps = {
+  participant: Participant;
+  canModerate?: boolean;
+  onMute?: (userId: string) => Promise<void> | void;
+  onRequestUnmute?: (userId: string) => Promise<void> | void;
+};
+
+export function ParticipantTile({
+  participant,
+  canModerate = false,
+  onMute,
+  onRequestUnmute,
+}: ParticipantTileProps) {
   const [meeting] = useRealtimeKitClient();
   const [busy, setBusy] = useState(false);
   const [controlNotice, setControlNotice] = useState("");
   const [unmutePrompt, setUnmutePrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
 
-  const canModerateParticipant = useMemo(
-    () =>
-      Boolean(
-        meeting &&
-          !participant.local &&
-          participant.role !== "host" &&
-          meeting.self.permissions.canDisableParticipantAudio,
-      ),
-    [meeting, participant.local, participant.role],
+  const canModerateParticipant = Boolean(
+    canModerate && !participant.local && participant.role !== "host",
   );
 
   useEffect(() => {
@@ -102,51 +106,22 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
     };
   }, [meeting, participant.local]);
 
-  const findProviderParticipant = () => {
-    if (!meeting) return undefined;
-    if (participant.providerPeerId) {
-      const direct = meeting.participants.joined.get(participant.providerPeerId);
-      if (direct) return direct;
-    }
-    return Array.from(meeting.participants.joined.values()).find(
-      (item) => item.customParticipantId === participant.id,
-    );
-  };
-
   const controlRemoteAudio = async () => {
-    if (!meeting || !canModerateParticipant || busy) return;
-    const target = findProviderParticipant();
-    if (!target) {
-      setControlNotice("Participant is no longer connected.");
-      return;
-    }
+    if (!canModerateParticipant || busy) return;
 
     setBusy(true);
     setControlNotice("");
     try {
       if (participant.muted) {
-        await meeting.participants.broadcastMessage(
-          "KUJUA_REQUEST_UNMUTE",
-          { message: "The host asked you to unmute your microphone." },
-          { participantIds: [target.id] },
-        );
+        if (!onRequestUnmute)
+          throw new Error("Unmute request is not available yet.");
+        await onRequestUnmute(participant.id);
         setControlNotice("Unmute request sent.");
         return;
       }
 
-      const roomSlug = window.location.pathname
-        .split("/")
-        .filter(Boolean)
-        .at(-1);
-      const sessionId = roomSlug ? readRecoveryState(roomSlug)?.sessionId : null;
-      if (!sessionId) throw new Error("Session control is not ready yet.");
-
-      const response = await fetch(
-        `/api/sessions/${sessionId}/participants/${participant.id}/mute`,
-        { method: "POST" },
-      );
-      if (!response.ok) throw new Error("Mute authorization failed.");
-      await target.disableAudio();
+      if (!onMute) throw new Error("Mute control is not available yet.");
+      await onMute(participant.id);
       setControlNotice("Participant muted.");
     } catch (cause) {
       setControlNotice(
@@ -182,7 +157,7 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
       data-testid={`participant-${participant.id}`}
     >
       <div className="tile-badges">
-        {participant.handRaised ? <span aria-label="Hand raised">✋</span> : null}
+        {participant.handRaised ? <span aria-label="Wants to speak">✋</span> : null}
         {participant.role === "host" ? <span aria-label="Host">★</span> : null}
       </div>
       <div className="avatar-ring">
