@@ -1,4 +1,8 @@
 import type { Participant } from "@/types/room";
+import {
+  hasRemoteSpeakingAccess,
+  isRemoteMicrophoneAvailable,
+} from "@/lib/room/microphone-state";
 
 type ParticipantsPanelProps = {
   participants: Participant[];
@@ -22,10 +26,14 @@ export function ParticipantsPanel({
         <span>{participants.length}</span>
       </div>
       {participants.map((p) => {
-        const speakingAccessActive =
-          p.currentRole === "speaker" || p.stageStatus === "ON_STAGE";
-        const microphoneControllable =
-          p.role !== "audience" || p.stageStatus === "ON_STAGE";
+        const speakingAccessActive = hasRemoteSpeakingAccess({
+          currentRole: p.currentRole,
+          stageStatus: p.stageStatus,
+        });
+        const microphoneControllable = isRemoteMicrophoneAvailable({
+          role: p.role,
+          stageStatus: p.stageStatus,
+        });
 
         return (
           <div className="participant-row" key={p.id}>
