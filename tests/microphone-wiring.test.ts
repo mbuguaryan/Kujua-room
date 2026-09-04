@@ -1,9 +1,17 @@
+// @vitest-environment node
+
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const roomScreen = readFileSync(resolve(process.cwd(), "components/kujua-room/RoomScreen.tsx"), "utf8");
-const realtimeKitHook = readFileSync(resolve(process.cwd(), "hooks/useRealtimeKit.ts"), "utf8");
+const roomScreen = readFileSync(
+  resolve(process.cwd(), "components/kujua-room/RoomScreen.tsx"),
+  "utf8",
+);
+const realtimeKitHook = readFileSync(
+  resolve(process.cwd(), "hooks/useRealtimeKit.ts"),
+  "utf8",
+);
 
 describe("microphone wiring", () => {
   it("keeps microphone and hand actions separate", () => {
