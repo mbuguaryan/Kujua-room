@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type { Participant } from "@/types/room";
+import { isRemoteMicrophoneAvailable } from "@/lib/room/microphone-state";
 
 const palette = [
   "#C1622D",
@@ -84,9 +85,10 @@ export function ParticipantTile({
   const canModerateParticipant = Boolean(
     canModerate && !participant.local && participant.role !== "host",
   );
-  const remoteMicrophoneAvailable = Boolean(
-    participant.stageStatus === "ON_STAGE" || participant.role !== "audience",
-  );
+  const remoteMicrophoneAvailable = isRemoteMicrophoneAvailable({
+    role: participant.role,
+    stageStatus: participant.stageStatus,
+  });
   const canControlRemoteAudio =
     canModerateParticipant && remoteMicrophoneAvailable;
 
