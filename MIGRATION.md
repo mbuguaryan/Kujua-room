@@ -122,6 +122,26 @@ credentials. Only real audio needs them.
 rather than imported from the frontend, which is what keeps the boundary
 one-directional.
 
+## Creating a host account
+
+There is no self-registration — hosts are provisioned. Signing in with an
+address that was never bootstrapped returns "Incorrect email or password",
+which is correct, not a bug.
+
+```bash
+cd frontend
+KUJUA_HOST_EMAIL=someone@example.com KUJUA_HOST_PASSWORD='a-strong-password' \
+  npm run bootstrap:host
+```
+
+The script creates the auth user if missing, confirms the email, upserts a
+profile, and grants host membership on the `mens-conference` room. It reads
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `backend/.env.local`.
+
+Both admin scripts run on Deno, like the functions beside them: Node resolves
+node_modules by walking up from `backend/`, which never reaches
+`frontend/node_modules`.
+
 ## Security decisions worth keeping
 
 Three things would have quietly regressed if ported literally. Each is load-

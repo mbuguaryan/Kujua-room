@@ -1,9 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
+/**
+ * Creates (or repairs) a host account. There is no self-registration in Kujua
+ * Room by design — hosts are provisioned, so signing in with an address that
+ * was never bootstrapped correctly returns "Incorrect email or password".
+ *
+ * Runs on Deno like the Edge Functions beside it. Node would resolve
+ * node_modules by walking up from backend/, which never reaches
+ * frontend/node_modules.
+ *
+ *   deno run --allow-net --allow-env --env-file=backend/.env.local \
+ *     backend/scripts/bootstrap-host.ts
+ *
+ * with KUJUA_HOST_EMAIL and KUJUA_HOST_PASSWORD also set.
+ */
+import { createClient } from "npm:@supabase/supabase-js@2.112.4";
 async function main() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const email = process.env.KUJUA_HOST_EMAIL;
-  const password = process.env.KUJUA_HOST_PASSWORD;
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const email = Deno.env.get("KUJUA_HOST_EMAIL");
+  const password = Deno.env.get("KUJUA_HOST_PASSWORD");
   if (!url || !key || !email || !password)
     throw new Error(
       "Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, KUJUA_HOST_EMAIL, and KUJUA_HOST_PASSWORD.",
@@ -59,5 +73,5 @@ main().catch((error: unknown) => {
   console.error(
     error instanceof Error ? error.message : "Host bootstrap failed.",
   );
-  process.exitCode = 1;
+  Deno.exit(1);
 });
