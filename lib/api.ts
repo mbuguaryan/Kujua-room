@@ -15,24 +15,61 @@ import { publicEnv } from "@/lib/env";
  * Keeping this in one function is what stopped the auth switch from touching
  * all fifteen call sites individually.
  */
+
+/** Shape callers already handle: a non-ok Response with a JSON `error` body. */
+function unreachable(detail: string) {
+  return new Response(
+    JSON.stringify({
+      error:
+        "Cannot reach the Kujua Room service. Check your connection and try again.",
+      detail,
+    }),
+    { status: 503, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}) {
-  const { VITE_API_BASE_URL } = publicEnv();
-  const {
-    data: { session },
-  } = await createClient().auth.getSession();
+  let base: string;
+  try {
+    base = publicEnv().VITE_API_BASE_URL;
+  } catch {
+    // Misconfigured env would otherwise throw on every call and strand the UI
+    // in whatever loading state it set before calling.
+    return unreachable("VITE_API_BASE_URL is not configured");
+  }
+
+  let accessToken: string | undefined;
+  try {
+    const {
+      data: { session },
+    } = await createClient().auth.getSession();
+    accessToken = session?.access_token;
+  } catch {
+    // A failed token read must not stop an unauthenticated call such as
+    // /rooms/live or /rooms/join from going out.
+    accessToken = undefined;
+  }
 
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type"))
     headers.set("Content-Type", "application/json");
-  if (session?.access_token)
-    headers.set("Authorization", `Bearer ${session.access_token}`);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
-  return fetch(`${VITE_API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-    // Bearer auth, not cookies — never send credentials cross-origin.
-    credentials: "omit",
-  });
+  try {
+    return await fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      // Bearer auth, not cookies — never send credentials cross-origin.
+      credentials: "omit",
+    });
+  } catch (cause) {
+    // A rejected fetch — API down, CORS refusal, offline, DNS — must surface as
+    // a response callers already know how to handle. Letting it reject strands
+    // any caller that set a loading flag before awaiting: the button sits on
+    // "Signing in…" forever. Same-origin under Next made this rare; a separate
+    // API origin makes it routine.
+    return unreachable(cause instanceof Error ? cause.message : "network error");
+  }
 }
 
 /** apiFetch + JSON parsing + a thrown Error carrying the server's message. */
