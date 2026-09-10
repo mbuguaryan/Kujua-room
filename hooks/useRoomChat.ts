@@ -1,8 +1,7 @@
-"use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RoomMessage } from "@/types/room";
+import { apiFetch } from "@/lib/api";
 
 export function useRoomChat({
   sessionId,
@@ -26,7 +25,7 @@ export function useRoomChat({
   }, [open]);
 
   const refresh = useCallback(async () => {
-    const response = await fetch(`/api/sessions/${sessionId}/messages`, {
+    const response = await apiFetch(`/sessions/${sessionId}/messages`, {
       cache: "no-store",
     });
     if (!response.ok) return;

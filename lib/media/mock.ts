@@ -1,4 +1,4 @@
-import type { MediaAdminAdapter } from "./types";
+import type { MediaAdminAdapter } from "./types.ts";
 export class MockMediaAdapter implements MediaAdminAdapter {
   async createMeeting() {
     return { meetingId: crypto.randomUUID() };

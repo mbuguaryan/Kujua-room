@@ -1,14 +1,20 @@
 import { z } from "zod";
 
 const publicSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(20),
-  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  VITE_SUPABASE_URL: z.string().url(),
+  VITE_SUPABASE_PUBLISHABLE_KEY: z.string().min(20),
+  VITE_API_BASE_URL: z.string().url(),
 });
+
+/**
+ * Browser environment. Vite inlines import.meta.env at build time and exposes
+ * only VITE_-prefixed values, which is what keeps the service-role key and the
+ * Cloudflare API token out of the bundle: client code cannot see them at all.
+ * scripts/check-bundle-secrets.mjs asserts that on every build.
+ */
 export const publicEnv = () =>
   publicSchema.parse({
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+    VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   });

@@ -1,4 +1,3 @@
-"use client";
 import { useEffect, useRef, useState } from "react";
 export function MicrophoneSetup({ selectedDeviceId, onDeviceChange }: { selectedDeviceId?: string; onDeviceChange: (id: string) => void }) { const [devices, setDevices] = useState<MediaDeviceInfo[]>([]); const [level, setLevel] = useState(0); const streamRef = useRef<MediaStream | null>(null);
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);

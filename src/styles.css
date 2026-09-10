@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* Font families formerly provided by next/font/google. The variable names are
+   unchanged so every rule in styles/*.css keeps working untouched. */
+:root {
+  --font-sans: "IBM Plex Sans";
+  --font-serif: "Fraunces";
+  --font-mono: "IBM Plex Mono";
+}
+
+/* Kujua Room's palette, exposed to Tailwind utilities so new components and the
+   existing stylesheets share one source of truth. */
+@theme {
+  --color-ink: #1c1f1e;
+  --color-ink2: #262a28;
+  --color-ink3: #2f3532;
+  --color-stone: #e8e3d9;
+  --color-dim: #9a9c93;
+  --color-line: #38403c;
+  --color-ember: #c1622d;
+  --color-ember2: #e07840;
+  --color-gold: #d4a537;
+  --color-go: #4caf50;
+  --color-danger: #c1442d;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+/* Existing hand-written stylesheets. Deliberately untouched by the replatform:
+   Tailwind is additive here, so the visual design is byte-identical. */
+@import "../styles/globals.css";
+@import "../styles/host-access.css";
+@import "../styles/mobile-chat.css";
+@import "../styles/host-dashboard.css";
+@import "../styles/mic-controls.css";

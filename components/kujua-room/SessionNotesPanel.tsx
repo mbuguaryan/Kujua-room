@@ -1,4 +1,3 @@
-"use client";
 import type { SessionNotes } from "@/types/room";
 
 export function SessionNotesPanel({ notes }: { notes: SessionNotes }) {

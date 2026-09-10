@@ -1,4 +1,3 @@
-"use client";
 import { useState } from "react";
 import { MicrophoneSetup } from "./MicrophoneSetup";
 export function JoinScreen({ inviteValid, initialName = "", loading, message, onJoin }: { inviteValid: boolean; initialName?: string; loading: boolean; message: string; onJoin: (name: string, deviceId?: string) => Promise<void> }) {

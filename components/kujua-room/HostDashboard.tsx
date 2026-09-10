@@ -1,7 +1,6 @@
-"use client";
-
 import { useEffect, useState, type FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { apiFetch } from "@/lib/api";
 
 type LiveSession = {
   id: string;
@@ -21,7 +20,7 @@ type HostRoom = {
 };
 
 function HostRoomCard({ room, displayName }: { room: HostRoom; displayName: string }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [agenda, setAgenda] = useState("");
   const [goals, setGoals] = useState("");
@@ -34,7 +33,7 @@ function HostRoomCard({ room, displayName }: { room: HostRoom; displayName: stri
       access: room.accessMode === "public" ? "public" : "private",
       name: displayName || "Host",
     });
-    router.push(`/r/${room.slug}?${params.toString()}`);
+    navigate(`/r/${room.slug}?${params.toString()}`);
   };
 
   async function startSession(event: FormEvent<HTMLFormElement>) {
@@ -42,7 +41,7 @@ function HostRoomCard({ room, displayName }: { room: HostRoom; displayName: stri
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/host/rooms/${room.id}/start`, {
+      const response = await apiFetch(`/host/rooms/${room.id}/start`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title, agenda, goals }),
@@ -121,8 +120,8 @@ function HostRoomCard({ room, displayName }: { room: HostRoom; displayName: stri
 }
 
 export function HostDashboard() {
-  const router = useRouter();
-  const search = useSearchParams();
+  const navigate = useNavigate();
+  const [search] = useSearchParams();
   const defaultAccess = search.get("access") === "public" ? "public" : "private";
   const [rooms, setRooms] = useState<HostRoom[]>([]);
   const [displayName, setDisplayName] = useState("Host");
@@ -134,9 +133,9 @@ export function HostDashboard() {
   const [accessMode, setAccessMode] = useState<"public" | "private">(defaultAccess);
 
   async function loadRooms() {
-    const response = await fetch("/api/host/rooms", { cache: "no-store" });
+    const response = await apiFetch("/host/rooms", { cache: "no-store" });
     if (response.status === 401 || response.status === 403) {
-      router.replace(`/host/login?access=${defaultAccess}`);
+      navigate(`/host/login?access=${defaultAccess}`, { replace: true });
       return;
     }
     const body = (await response.json()) as { rooms?: HostRoom[]; displayName?: string; error?: string };
@@ -157,7 +156,7 @@ export function HostDashboard() {
     setCreating(true);
     setError("");
     try {
-      const response = await fetch("/api/host/rooms", {
+      const response = await apiFetch("/host/rooms", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: roomName, description, accessMode }),
@@ -183,7 +182,7 @@ export function HostDashboard() {
             <h1>Host workspace</h1>
             <p>Create reusable rooms, then give every live session its own title, agenda and goals.</p>
           </div>
-          <button type="button" className="btn" onClick={() => router.push("/")}>Home</button>
+          <button type="button" className="btn" onClick={() => navigate("/")}>Home</button>
         </header>
 
         <section className="host-create-card">

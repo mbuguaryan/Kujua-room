@@ -1,7 +1,8 @@
 {
   "name": "kujua-room",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
+  "type": "module",
   "overrides": {
     "uuid": "11.1.1"
   },
@@ -9,29 +10,32 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "vite",
     "prebuild": "vitest run tests/microphone-state.test.ts tests/microphone-wiring.test.ts",
-    "build": "next build",
-    "start": "next start",
+    "build": "tsc --noEmit && vite build && node scripts/check-bundle-secrets.mjs",
+    "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "functions:serve": "supabase functions serve --env-file .env.local",
+    "functions:deploy": "supabase functions deploy rooms sessions host invites",
     "bootstrap:host": "tsx scripts/bootstrap-host.ts",
-    "setup:realtimekit": "tsx scripts/setup-realtimekit.ts"
+    "setup:realtimekit": "tsx scripts/setup-realtimekit.ts",
+    "check:secrets": "node scripts/check-bundle-secrets.mjs"
   },
   "dependencies": {
     "@cloudflare/realtimekit-react": "2.0.2",
-    "@supabase/ssr": "0.12.5",
     "@supabase/supabase-js": "2.112.4",
-    "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "0.0.1",
+    "react-router-dom": "7.18.3",
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.0",
     "@playwright/test": "1.62.1",
+    "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -41,11 +45,15 @@
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.1",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.3",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
     "jsdom": "29.0.1",
     "prettier": "3.6.2",
+    "tailwindcss": "4.3.3",
     "tsx": "4.23.13",
     "typescript": "6.0.2",
+    "typescript-eslint": "^8.70.0",
+    "vite": "8.2.2",
     "vitest": "4.1.11"
   }
 }

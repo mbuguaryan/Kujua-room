@@ -1,4 +1,3 @@
-"use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 export function usePrivateNotes(sessionId: string, userId: string) {

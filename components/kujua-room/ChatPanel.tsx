@@ -1,7 +1,6 @@
-"use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Participant, RoomMessage } from "@/types/room";
+import { apiFetch } from "@/lib/api";
 
 export function ChatPanel({
   sessionId,
@@ -61,7 +60,7 @@ export function ChatPanel({
 
     setBusy(true);
     try {
-      const response = await fetch(`/api/sessions/${sessionId}/messages`, {
+      const response = await apiFetch(`/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

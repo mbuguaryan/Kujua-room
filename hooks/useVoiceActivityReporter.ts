@@ -1,6 +1,5 @@
-"use client";
-
 import { useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 
 type VoiceActivityMeeting = {
   self: {
@@ -43,7 +42,6 @@ export function useVoiceActivityReporter({
     let lastReportedAt = 0;
     let lastVoiceObservedAt = 0;
     let localSampleTimer: number | undefined;
-    let remotePollTimer: number | undefined;
     let audioContext: AudioContext | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
     let analyser: AnalyserNode | null = null;
@@ -54,7 +52,7 @@ export function useVoiceActivityReporter({
       const now = Date.now();
       if (!force && now - lastReportedAt < REPORT_THROTTLE_MS) return;
       lastReportedAt = now;
-      void fetch(`/api/sessions/${sessionId}/voice-activity`, {
+      void apiFetch(`/sessions/${sessionId}/voice-activity`, {
         method: "POST",
         keepalive: true,
       }).catch(() => undefined);
@@ -132,7 +130,7 @@ export function useVoiceActivityReporter({
     document.addEventListener("visibilitychange", onVisibilityChange);
     startLocalAnalyser();
 
-    remotePollTimer = window.setInterval(() => {
+    const remotePollTimer = window.setInterval(() => {
       if (hasRemoteVoice()) observeVoice();
     }, REMOTE_POLL_MS);
 

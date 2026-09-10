@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type { Participant } from "@/types/room";

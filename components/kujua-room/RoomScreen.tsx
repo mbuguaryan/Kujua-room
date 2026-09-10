@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
 import type { RoomBootstrap, SessionNotes } from "@/types/room";
 import { ParticipantTile } from "./ParticipantTile";
@@ -16,7 +14,7 @@ import { useKujuaRealtimeKit } from "@/hooks/useRealtimeKit";
 import { useVoiceActivityReporter } from "@/hooks/useVoiceActivityReporter";
 import { useRoomChat } from "@/hooks/useRoomChat";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { ChatPanel } from "./ChatPanel";
 import { ToolbarIcon } from "./ToolbarIcon";
 import {
@@ -25,6 +23,7 @@ import {
   readRecoveryState,
   saveRecoveryState,
 } from "@/lib/room/recovery";
+import { apiFetch } from "@/lib/api";
 
 export function RoomScreen({
   bootstrap,
@@ -75,7 +74,7 @@ export function RoomScreen({
   const grantStageAccess = media.grantStageAccess;
   const denyStageAccess = media.denyStageAccess;
   const removeStageAccess = media.removeStageAccess;
-  const router = useRouter();
+  const navigate = useNavigate();
   const privateNotes = usePrivateNotes(
     bootstrap.session.id,
     bootstrap.member.userId,
@@ -261,13 +260,13 @@ export function RoomScreen({
 
   const leave = useCallback(async () => {
     await media.leave();
-    await fetch(`/api/sessions/${bootstrap.session.id}/leave`, {
+    await apiFetch(`/sessions/${bootstrap.session.id}/leave`, {
       method: "POST",
       keepalive: true,
     });
     clearRecoveryState();
-    router.push(`/r/${bootstrap.room.slug}`);
-  }, [bootstrap.room.slug, bootstrap.session.id, media, router]);
+    navigate(`/r/${bootstrap.room.slug}`);
+  }, [bootstrap.room.slug, bootstrap.session.id, media, navigate]);
 
   const muteParticipant = useCallback(
     async (userId: string) => {
@@ -382,7 +381,7 @@ export function RoomScreen({
         try {
           await media.requestStageAccess();
         } catch (cause) {
-          await fetch(`/api/sessions/${bootstrap.session.id}/stage`, {
+          await apiFetch(`/sessions/${bootstrap.session.id}/stage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "cancel" }),
@@ -512,7 +511,7 @@ export function RoomScreen({
       const expiresAt = new Date(
         Date.now() + 24 * 60 * 60 * 1000,
       ).toISOString();
-      const response = await fetch("/api/invites/create", {
+      const response = await apiFetch("/invites/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -849,7 +848,7 @@ export function RoomScreen({
           endsAt={endsAt}
           notes={privateNotes.content}
           onEnded={() =>
-            void fetch(`/api/sessions/${bootstrap.session.id}/finalize`, {
+            void apiFetch(`/sessions/${bootstrap.session.id}/finalize`, {
               method: "POST",
             }).finally(() => leave())
           }

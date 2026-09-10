@@ -1,4 +1,4 @@
-import type { RoomRole } from "@/types/room";
+import type { RoomRole } from "@/types/room.ts";
 export type MediaToken = {
   authToken: string;
   meetingId: string;

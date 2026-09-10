@@ -13,7 +13,7 @@ const realtimeKitHook = readFileSync(
   "utf8",
 );
 const stageRoute = readFileSync(
-  resolve(process.cwd(), "app/api/sessions/[sessionId]/stage/route.ts"),
+  resolve(process.cwd(), "supabase/functions/sessions/stage.ts"),
   "utf8",
 );
 
