@@ -18,16 +18,36 @@ Supabase Edge Functions — rooms · sessions · host · invites
   └─▶ Cloudflare RealtimeKit
 ```
 
+## Layout
+
+```
+frontend/     React SPA — Vite, React Router, Tailwind. Owns package.json.
+backend/      Supabase — Edge Functions and migrations. Runs on Deno.
+legacy/       Original static prototype, kept for reference.
+```
+
+The dependency runs one way: `backend/` imports nothing from `frontend/`.
+The frontend imports exactly one thing from the backend — the generated
+`database.types.ts`, type-only, erased at build. Two test suites also reach
+across to exercise backend logic directly.
+
 ## Running it
 
-```bash
-npm install
-cp .env.example .env          # fill in VITE_* for the browser
-npm run dev                   # http://localhost:3000
+Everything is driven from `frontend/`:
 
-# API, in a second terminal (needs the Supabase CLI)
+```bash
+cd frontend
+npm install
+cp ../.env.example .env       # keep only the VITE_* block
+npm run dev                   # http://localhost:3000
+```
+
+API, in a second terminal (needs the Supabase CLI):
+
+```bash
+cd frontend
 supabase start
-npm run functions:serve       # reads .env.local for the server secrets
+npm run functions:serve       # reads ../backend/.env.local
 ```
 
 `MEDIA_ADAPTER=mock` keeps the whole app clickable without Cloudflare
@@ -44,23 +64,27 @@ credentials. Only real audio needs them.
 | `npm run lint` | ESLint |
 | `npm run check:secrets` | scan `dist/` for server-only material |
 | `npm run functions:deploy` | deploy all four functions |
+| `npm run db:push` | apply migrations |
+| `npm run types:generate` | regenerate `database.types.ts` from the schema |
 
 ## What moved
 
 | Was | Now |
 |---|---|
-| `app/**/page.tsx` | `src/App.tsx` (React Router) |
-| `app/api/**/route.ts` (24) | `supabase/functions/{rooms,sessions,host,invites}` |
-| `lib/security/*`, `lib/media/*`, `lib/cloudflare/*` | `supabase/functions/_shared/*` |
+| `app/**/page.tsx` | `frontend/src/App.tsx` (React Router) |
+| `app/api/**/route.ts` (24) | `backend/supabase/functions/{rooms,sessions,host,invites}` |
+| `lib/security/*`, `lib/media/*`, `lib/cloudflare/*` | `backend/supabase/functions/_shared/*` |
+| `lib/validation/schemas.ts` | `backend/.../_shared/validation.ts` |
+| `lib/supabase/database.types.ts` | `backend/.../_shared/database.types.ts` |
 | `proxy.ts` (CSRF + session refresh) | bearer auth + `_shared/cors.ts` |
-| `next.config.ts` headers | `public/_headers`, `deploy/nginx-headers.conf` |
-| `next/font/google` | `<link>` in `index.html`, same CSS variables |
+| `next.config.ts` headers | `frontend/public/_headers`, `frontend/deploy/nginx-headers.conf` |
+| `next/font/google` | `<link>` in `frontend/index.html`, same CSS variables |
 | cookie session | localStorage + `Authorization` header |
-| `app/*.css` | `styles/*.css` — **contents unchanged** |
+| `app/*.css` | `frontend/styles/*.css` — **contents unchanged** |
 
-`lib/validation/schemas.ts`, `types/room.ts`, `lib/media/{types,mock}.ts` and
-`lib/supabase/database.types.ts` are shared by both sides through the import map
-in `supabase/functions/deno.json`, so there is one copy of each.
+`RoomRole` is derived in `_shared/types.ts` from the generated Postgres enum
+rather than imported from the frontend, which is what keeps the boundary
+one-directional.
 
 ## Security decisions worth keeping
 
