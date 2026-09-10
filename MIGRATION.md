@@ -42,13 +42,36 @@ cp ../.env.example .env       # keep only the VITE_* block
 npm run dev                   # http://localhost:3000
 ```
 
-API, in a second terminal (needs the Supabase CLI):
+The API is the **deployed** Edge Functions, in local dev and in production
+alike, so both hit the real database and there is no local stack to keep in
+sync. `frontend/.env` points `VITE_API_BASE_URL` at
+`https://<project-ref>.supabase.co/functions/v1`.
+
+To ship backend changes:
 
 ```bash
 cd frontend
-supabase start
-npm run functions:serve       # reads ../backend/.env.local
+npm run link                  # once: supabase login, then link the project
+npm run functions:deploy
+npm run functions:logs        # tail runtime errors
 ```
+
+Function secrets live in the project, not in a file:
+
+```bash
+supabase secrets set --workdir backend \
+  MEDIA_ADAPTER=mock \
+  ALLOWED_ORIGINS=http://localhost:3000,https://your-production-domain \
+  CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_REALTIMEKIT_APP_ID=... CLOUDFLARE_API_TOKEN=...
+```
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected
+automatically — Supabase rejects secrets starting with `SUPABASE_`.
+
+`ALLOWED_ORIGINS` must include `http://localhost:3000`, or local dev is refused
+by CORS. `rooms` and `host` are deployed with `verify_jwt = false` (see
+`backend/supabase/config.toml`) because anonymous join and sign-in have no token
+yet; authorization is still done in the handlers.
 
 `MEDIA_ADAPTER=mock` keeps the whole app clickable without Cloudflare
 credentials. Only real audio needs them.
@@ -60,10 +83,11 @@ credentials. Only real audio needs them.
 | `npm run dev` | Vite dev server |
 | `npm run build` | typecheck → build → **secret scan** |
 | `npm run test` | Vitest (39 tests) |
-| `npm run test:e2e` | Playwright — needs `functions:serve` running |
+| `npm run test:e2e` | Playwright — hits the deployed API |
 | `npm run lint` | ESLint |
 | `npm run check:secrets` | scan `dist/` for server-only material |
 | `npm run functions:deploy` | deploy all four functions |
+| `npm run functions:logs` | tail deployed function logs |
 | `npm run db:push` | apply migrations |
 | `npm run types:generate` | regenerate `database.types.ts` from the schema |
 

@@ -18,13 +18,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "functions:serve": "supabase functions serve --workdir ../backend --env-file ../backend/.env.local",
     "functions:deploy": "supabase functions deploy rooms sessions host invites --workdir ../backend",
     "bootstrap:host": "tsx ../backend/scripts/bootstrap-host.ts",
     "setup:realtimekit": "tsx ../backend/scripts/setup-realtimekit.ts",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
     "db:push": "supabase db push --workdir ../backend",
-    "types:generate": "supabase gen types typescript --workdir ../backend --local > ../backend/supabase/functions/_shared/database.types.ts"
+    "types:generate": "supabase gen types typescript --workdir ../backend --linked > ../backend/supabase/functions/_shared/database.types.ts",
+    "functions:logs": "supabase functions logs --workdir ../backend",
+    "link": "supabase link --workdir ../backend"
   },
   "dependencies": {
     "@cloudflare/realtimekit-react": "2.0.2",
