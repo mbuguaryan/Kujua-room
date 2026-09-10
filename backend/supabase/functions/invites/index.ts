@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
-import { z } from "zod";
+import { z } from "npm:zod@4.5.4";
 import { Router } from "../_shared/router.ts";
 import { json, apiError } from "../_shared/http.ts";
 import { HttpError, requireMembership } from "../_shared/auth.ts";

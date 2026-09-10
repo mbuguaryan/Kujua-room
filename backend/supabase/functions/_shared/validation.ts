@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "npm:zod@4.5.4";
 
 export const uuidSchema = z.string().uuid();
 export const roomSlugSchema = z

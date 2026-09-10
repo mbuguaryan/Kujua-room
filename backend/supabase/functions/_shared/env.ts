@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "npm:zod@4.5.4";
 
 const schema = z.object({
   SUPABASE_URL: z.string().url(),

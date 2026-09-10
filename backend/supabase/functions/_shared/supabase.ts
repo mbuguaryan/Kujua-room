@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "npm:@supabase/supabase-js@2.112.4";
 import type { Database } from "./database.types.ts";
 import { serverEnv } from "./env.ts";
 

@@ -18,7 +18,7 @@
     "paths": {
       "@/*": ["./*"],
       "@backend/*": ["../backend/*"],
-      "zod": ["./node_modules/zod"]
+      "npm:zod@4.5.4": ["./node_modules/zod"]
     }
   },
   "include": ["src", "components", "hooks", "lib", "types", "tests", "*.ts"],

@@ -13,10 +13,11 @@ export default defineConfig({
       // bundle imports nothing from backend/ except types, which are erased.
       "@backend": fileURLToPath(new URL("../backend", import.meta.url)),
 
-      // Those backend files resolve their own dependencies through Deno's
-      // import map at runtime. Node resolution walks up from backend/ and never
-      // reaches frontend/node_modules, so point zod at the copy installed here.
-      zod: fileURLToPath(new URL("./node_modules/zod", import.meta.url)),
+      // Backend files use fully-qualified npm: specifiers so Supabase can
+      // bundle them without an import map. Node has no idea what "npm:" means,
+      // so map it to the copy installed here for the two suites that import
+      // backend logic.
+      "npm:zod@4.5.4": fileURLToPath(new URL("./node_modules/zod", import.meta.url)),
     },
   },
   test: {

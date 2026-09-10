@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 import type { Database } from "./database.types.ts";
 import type { RoomRole } from "./types.ts";
 import { mediaAdapter } from "./media/index.ts";

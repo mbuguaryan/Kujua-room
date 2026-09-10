@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 import type { Database } from "./database.types.ts";
 import { createAdminClient } from "./supabase.ts";
 import { HttpError } from "./auth.ts";
