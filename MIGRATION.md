@@ -61,15 +61,16 @@ Function secrets live in the project, not in a file:
 ```bash
 supabase secrets set --workdir backend \
   MEDIA_ADAPTER=mock \
-  ALLOWED_ORIGINS=http://localhost:3000,https://your-production-domain \
+  ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,https://kujuaroom.com,https://www.kujuaroom.com \
   CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_REALTIMEKIT_APP_ID=... CLOUDFLARE_API_TOKEN=...
 ```
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected
 automatically — Supabase rejects secrets starting with `SUPABASE_`.
 
-`ALLOWED_ORIGINS` must include `http://localhost:3000`, or local dev is refused
-by CORS. `rooms` and `host` are deployed with `verify_jwt = false` (see
+`ALLOWED_ORIGINS` is an exact match and must include `http://localhost:3000`
+alongside the live origins, or local dev is refused by CORS. It is read once at
+module load, so redeploy after changing it. `rooms` and `host` are deployed with `verify_jwt = false` (see
 `backend/supabase/config.toml`) because anonymous join and sign-in have no token
 yet; authorization is still done in the handlers.
 
