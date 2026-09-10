@@ -24,7 +24,6 @@
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
     "db:push": "supabase db push --workdir ../backend",
     "types:generate": "supabase gen types typescript --workdir ../backend --linked > ../backend/supabase/functions/_shared/database.types.ts",
-    "functions:logs": "supabase functions logs --workdir ../backend",
     "link": "supabase link --workdir ../backend"
   },
   "dependencies": {

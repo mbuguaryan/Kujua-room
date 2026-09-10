@@ -118,8 +118,8 @@ export function RoomScreen({
       });
       for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
         try {
-          const joined = await fetch(
-            `/api/sessions/${bootstrap.session.id}/join`,
+          const joined = await apiFetch(
+            `/sessions/${bootstrap.session.id}/join`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -127,8 +127,8 @@ export function RoomScreen({
             },
           );
           if (!joined.ok) throw new Error("join failed");
-          const response = await fetch(
-            `/api/sessions/${bootstrap.session.id}/media-token`,
+          const response = await apiFetch(
+            `/sessions/${bootstrap.session.id}/media-token`,
             { method: "POST" },
           );
           if (!response.ok) throw new Error("media token failed");
@@ -229,8 +229,8 @@ export function RoomScreen({
 
     const syncStage = async () => {
       try {
-        const response = await fetch(
-          `/api/sessions/${bootstrap.session.id}/stage`,
+        const response = await apiFetch(
+          `/sessions/${bootstrap.session.id}/stage`,
           { cache: "no-store" },
         );
         if (!response.ok || stopped) return;
@@ -272,8 +272,8 @@ export function RoomScreen({
     async (userId: string) => {
       setModerationBusy(userId);
       try {
-        const response = await fetch(
-          `/api/sessions/${bootstrap.session.id}/participants/${userId}/mute`,
+        const response = await apiFetch(
+          `/sessions/${bootstrap.session.id}/participants/${userId}/mute`,
           { method: "POST" },
         );
         if (!response.ok) throw new Error("Mute authorization failed.");
@@ -341,8 +341,8 @@ export function RoomScreen({
   const muteAll = useCallback(async () => {
     setModerationBusy("all");
     try {
-      const response = await fetch(
-        `/api/sessions/${bootstrap.session.id}/participants/mute-all`,
+      const response = await apiFetch(
+        `/sessions/${bootstrap.session.id}/participants/mute-all`,
         { method: "POST" },
       );
       if (!response.ok) throw new Error("Mute-all authorization failed.");
@@ -362,8 +362,8 @@ export function RoomScreen({
     setHandBusy(true);
     const action = handPending ? "cancel" : "raise";
     try {
-      const response = await fetch(
-        `/api/sessions/${bootstrap.session.id}/stage`,
+      const response = await apiFetch(
+        `/sessions/${bootstrap.session.id}/stage`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -455,8 +455,8 @@ export function RoomScreen({
           providerGranted = true;
         }
 
-        const response = await fetch(
-          `/api/sessions/${bootstrap.session.id}/stage`,
+        const response = await apiFetch(
+          `/sessions/${bootstrap.session.id}/stage`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -815,8 +815,8 @@ export function RoomScreen({
             title="End session for everyone"
             onClick={async () => {
               if (confirm("End the session for everyone?")) {
-                const response = await fetch(
-                  `/api/sessions/${bootstrap.session.id}/end`,
+                const response = await apiFetch(
+                  `/sessions/${bootstrap.session.id}/end`,
                   { method: "POST" },
                 );
                 const body = (await response.json()) as { endsAt?: string };

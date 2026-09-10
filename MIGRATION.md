@@ -53,7 +53,7 @@ To ship backend changes:
 cd frontend
 npm run link                  # once: supabase login, then link the project
 npm run functions:deploy      # --use-api: bundles server-side, no Docker
-npm run functions:logs        # tail runtime errors
+
 ```
 
 `--use-api` matters. The default bundler pulls a 1.1 GB edge-runtime image and
@@ -99,7 +99,7 @@ credentials. Only real audio needs them.
 | `npm run lint` | ESLint |
 | `npm run check:secrets` | scan `dist/` for server-only material |
 | `npm run functions:deploy` | deploy all four functions |
-| `npm run functions:logs` | tail deployed function logs |
+
 | `npm run db:push` | apply migrations |
 | `npm run types:generate` | regenerate `database.types.ts` from the schema |
 
