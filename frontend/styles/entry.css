@@ -1,0 +1,278 @@
+/* Entry-screen refinements. Loaded after globals.css, so equal-specificity
+   rules here win by source order. The palette, type scale and component
+   vocabulary are unchanged — this sharpens hierarchy and fills in the states
+   the original markup had no expression for (loading, failed, disabled). */
+
+/* ── Hero ──────────────────────────────────────────────────────────────── */
+.home-hero > h1 {
+  font: 600 clamp(30px, 7vw, 42px) var(--font-serif), serif;
+  margin: 14px 0 6px;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.home-hero > p {
+  max-width: 46ch;
+  margin: 0 auto;
+  line-height: 1.55;
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+.entry-grid {
+  align-items: stretch;
+  margin: 32px 0 40px;
+}
+.entry-card > strong {
+  font-family: var(--font-serif), serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.entry-card > span {
+  line-height: 1.55;
+}
+
+/* Shared small-caps label, matching .form-label without needing a <label>. */
+.field-label {
+  display: block;
+  margin: 6px 0 -4px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.field-hint {
+  margin: -6px 0 0;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.entry-aside {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Selected visibility reads as a filled state, not just a hairline. */
+.host-access-choice button.active {
+  background: #c1622d1f;
+  border-color: var(--ember2);
+  box-shadow: none;
+}
+.host-access-choice button.active b {
+  color: var(--ember2);
+}
+
+/* ── Live now ──────────────────────────────────────────────────────────── */
+.live-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.live-list h2 {
+  margin: 0;
+  font: 600 20px var(--font-serif), serif;
+}
+.live-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 500 11px var(--font-mono), monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  50% { opacity: 0.35; }
+}
+
+.live-rooms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.live-room {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--ink2);
+  transition: border-color 0.18s ease;
+}
+.live-room:hover {
+  border-color: var(--ember2);
+}
+.live-room-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.live-room-body strong {
+  font-size: 15px;
+}
+.live-room-body p {
+  margin: 0;
+  color: var(--stone);
+  font-size: 13px;
+}
+.live-room-body small {
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  font: 500 10px var(--font-mono), monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--green);
+}
+.live-room .btn.small {
+  flex: none;
+}
+
+/* States the original markup could not express. */
+.live-empty {
+  padding: 28px 20px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  text-align: center;
+}
+.live-empty strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.live-empty p {
+  max-width: 44ch;
+  margin: 0 auto;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.live-skeleton {
+  display: grid;
+  gap: 10px;
+}
+.skeleton-row {
+  height: 78px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--ink2) 0%, var(--ink3) 50%, var(--ink2) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  to { background-position: -200% 0; }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Join screen ───────────────────────────────────────────────────────── */
+.session-preview h2 {
+  text-wrap: balance;
+}
+
+@media (max-width: 640px) {
+  .home-screen { padding: 26px 16px 40px; }
+  .home-hero > .brand-mark { width: 40px; height: 40px; font-size: 20px; }
+  .home-hero > p { font-size: 14px; }
+  .entry-grid { margin: 24px 0 32px; gap: 14px; }
+  .entry-card { padding: 20px; }
+  .live-room { flex-direction: column; align-items: stretch; gap: 12px; }
+  .live-room .btn.small { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot, .skeleton-row { animation: none; }
+}
+
+/* ── Button feedback ───────────────────────────────────────────────────── */
+/* The only signal a request was in flight used to be the label changing.
+   These two buttons both make a network call that can take a moment. */
+.btn-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-right: 9px;
+  border: 2px solid #ffffff59;
+  border-top-color: #fff;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: btn-spin 0.7s linear infinite;
+}
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+.btn:disabled {
+  cursor: not-allowed;
+}
+.btn.primary:disabled {
+  background: var(--ink3);
+  border-color: var(--line);
+  color: var(--dim);
+  opacity: 1;
+}
+
+/* ── Host sign in ──────────────────────────────────────────────────────── */
+.form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 13px;
+  border: 1px solid #c1442d66;
+  border-radius: 10px;
+  background: #c1442d1a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.form-error::before {
+  content: "!";
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  font: 700 11px var(--font-sans), sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner { animation: none; }
+}

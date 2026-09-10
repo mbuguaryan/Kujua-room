@@ -32,6 +32,7 @@
    Tailwind is additive here, so the visual design is byte-identical. */
 @import "../styles/globals.css";
 @import "../styles/host-access.css";
+@import "../styles/entry.css";
 @import "../styles/mobile-chat.css";
 @import "../styles/host-dashboard.css";
 @import "../styles/mic-controls.css";

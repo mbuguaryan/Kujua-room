@@ -62,5 +62,5 @@ export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = ""
   }
 
   if (bootstrap) return <RoomScreen bootstrap={bootstrap} deviceId={deviceId} />;
-  return <><JoinScreen inviteValid={Boolean(inviteToken) || hostEntry || Boolean(initialName)} initialName={initialName} loading={!(["idle", "failed"] as JoinState[]).includes(state)} message={labels[state]} onJoin={join} />{error ? <div className="toast visible" role="alert">{error}</div> : null}</>;
+  return <><JoinScreen roomSlug={slug} inviteValid={Boolean(inviteToken) || hostEntry || Boolean(initialName)} initialName={initialName} loading={!(["idle", "failed"] as JoinState[]).includes(state)} message={labels[state]} onJoin={join} />{error ? <div className="toast visible" role="alert">{error}</div> : null}</>;
 }
