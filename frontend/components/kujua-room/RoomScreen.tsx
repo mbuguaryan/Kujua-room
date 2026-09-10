@@ -580,25 +580,29 @@ export function RoomScreen({
   return (
     <main className="call-screen">
       <header className="call-header">
-        <div>
-          <span className={`status-dot ${media.connected ? "" : "waiting"}`} />
-          <span>
-            Room: <b>{bootstrap.room.name}</b>
+        <div className="room-identity">
+          <span className="room-name">{bootstrap.room.name}</span>
+          {/* One status line, not two. The old header rendered both
+              media.connected and media.connectionState, which printed
+              "Connected" twice whenever the room was healthy. */}
+          <span
+            className="room-status"
+            data-state={media.connectionState}
+            aria-live="polite"
+          >
+            <span
+              className={`status-dot ${media.connected ? "" : "waiting"}`}
+              aria-hidden="true"
+            />
+            {media.error ??
+              {
+                connecting: "Connecting securely…",
+                connected: "Connected",
+                reconnecting: "Reconnecting…",
+                "connection-lost": "Connection lost",
+                failed: "Unable to connect",
+              }[media.connectionState]}
           </span>
-          <small>
-            {media.connected
-              ? "Connected"
-              : (media.error ?? "Connecting securely…")}
-          </small>
-          <small className="connection-detail">
-            {{
-              connecting: "Connecting",
-              connected: "Connected",
-              reconnecting: "Reconnecting",
-              "connection-lost": "Connection lost",
-              failed: "Unable to connect",
-            }[media.connectionState]}
-          </small>
         </div>
         <nav>
           <button

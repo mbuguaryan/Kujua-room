@@ -1,0 +1,166 @@
+/* Room-screen refinements. Presentational only — no state logic was touched.
+   Loaded last, so equal-specificity rules win by source order. */
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+/* Was a two-column mono grid holding a label, a room name and two status
+   lines, which read as unstyled debug output in the top-left corner. */
+.call-header {
+  padding: 12px 20px;
+  gap: 20px;
+}
+.call-header > .room-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  grid-template-columns: none;
+  font: inherit;
+}
+.room-name {
+  font: 600 16px var(--font-serif), serif;
+  color: var(--stone);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.room-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ink);
+  font: 500 11px var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.room-status[data-state="connected"] {
+  color: var(--green);
+  border-color: #4caf5040;
+}
+.room-status[data-state="reconnecting"],
+.room-status[data-state="connecting"] {
+  color: var(--gold);
+  border-color: #d4a53740;
+}
+.room-status[data-state="connection-lost"],
+.room-status[data-state="failed"] {
+  color: #f0a28f;
+  border-color: #c1442d55;
+}
+.call-header .status-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+}
+.room-status[data-state="connected"] .status-dot {
+  animation: room-pulse 2.4s ease-in-out infinite;
+}
+@keyframes room-pulse {
+  50% { opacity: 0.4; }
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────────── */
+/* Tiles used to stretch across the full row and pin to the top-left, so a
+   two-person call looked like a mistake. Cap the tile width and centre. */
+.audio-grid {
+  grid-template-columns: repeat(auto-fit, minmax(158px, 190px));
+  justify-content: center;
+  align-content: center;
+  gap: 14px;
+}
+.audio-tile {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.audio-tile.speaking {
+  transform: translateY(-2px);
+}
+
+/* ── Toolbar ───────────────────────────────────────────────────────────── */
+/* The previous rule forced seven fixed grid columns and assigned each button
+   an explicit one. Roles that render fewer buttons — audience sees four —
+   left the empty columns as gaps, which is the stretched, lopsided bar.
+   Centred flex adapts to whatever subset is actually present. */
+.controls:has(> button[aria-label="Mute or unmute microphone"]) {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding-inline: max(12px, env(safe-area-inset-left))
+    max(12px, env(safe-area-inset-right));
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"]) > .control {
+  grid-column: auto;
+  width: auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  padding-inline: 16px;
+  white-space: nowrap;
+}
+/* The microphone stays the visual anchor: round, larger, never a pill. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Mute or unmute microphone"] {
+  grid-column: auto;
+  flex: none;
+  width: 58px;
+  min-width: 58px;
+  height: 58px;
+  padding: 0;
+  margin-inline: 6px;
+  border-radius: 50%;
+  font-size: 0;
+}
+.control {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.control:hover:not(:disabled) {
+  border-color: var(--ember2);
+}
+.control.leave,
+.control[aria-label="End session for everyone"] {
+  flex: none;
+}
+
+/* ── Panels ────────────────────────────────────────────────────────────── */
+.call-header nav button.active {
+  background: #c1622d1f;
+}
+.coaching-banner {
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 720px) {
+  .call-header { padding: 10px 12px; gap: 10px; }
+  .call-header > .room-identity { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .room-name { font-size: 14px; max-width: 42vw; }
+  .room-status { padding: 3px 9px 3px 7px; font-size: 10px; }
+}
+
+@media (max-width: 640px) {
+  .audio-grid { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }
+  .controls:has(> button[aria-label="Mute or unmute microphone"]) { gap: 6px; }
+  .controls:has(> button[aria-label="Mute or unmute microphone"]) > .control {
+    height: 46px;
+    padding-inline: 12px;
+  }
+  .controls:has(> button[aria-label="Mute or unmute microphone"])
+    > button[aria-label="Mute or unmute microphone"] {
+    width: 52px;
+    min-width: 52px;
+    height: 52px;
+    margin-inline: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-status[data-state="connected"] .status-dot { animation: none; }
+  .audio-tile.speaking { transform: none; }
+}
