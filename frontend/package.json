@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "functions:deploy": "supabase functions deploy rooms sessions host invites --workdir ../backend",
+    "functions:deploy": "supabase functions deploy rooms sessions host invites --use-api --workdir ../backend",
     "bootstrap:host": "tsx ../backend/scripts/bootstrap-host.ts",
     "setup:realtimekit": "tsx ../backend/scripts/setup-realtimekit.ts",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",

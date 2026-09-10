@@ -87,7 +87,7 @@ export async function stagePost(request: Request, { sessionId }: Params) {
         .eq("session_id", sessionId).eq("user_id", user.id)
         .eq("status", "pending").maybeSingle();
       if (existingError) throw existingError;
-      if (existing) return json(request, { request: existing }
+      if (existing) return json(request, { request: existing });
 
       const now = new Date().toISOString();
       const { data, error } = await admin

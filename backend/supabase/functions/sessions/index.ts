@@ -19,6 +19,20 @@ import {
   uuidSchema,
 } from "../_shared/validation.ts";
 
+/**
+ * record_session_voice_activity was added by migration 20260902062049, after
+ * database.types.ts was last generated, so it is missing from the generated
+ * RPC union. The Next route carried the same cast. Running
+ * `npm run types:generate` against the linked project removes the need for it.
+ */
+type VoiceActivityRpc = (
+  fn: string,
+  args: Record<string, unknown>,
+) => Promise<{
+  data: string | null;
+  error: { message: string; code?: string } | null;
+}>;
+
 const router = new Router("sessions");
 
 /* ── POST /sessions — create a scheduled session ─────────────────────────── */
@@ -372,7 +386,8 @@ router.post("/:sessionId/voice-activity", async (request, { sessionId }) => {
     const { user, session, admin } = await sessionAuthority(request, sessionId);
     await rateLimit("voice-activity", user.id, 12, 60, admin);
     if (session.status !== "live") throw new HttpError(409, "The session is not live.");
-    const { data, error } = await admin.rpc("record_session_voice_activity", {
+    const rpc = admin.rpc.bind(admin) as unknown as VoiceActivityRpc;
+    const { data, error } = await rpc("record_session_voice_activity", {
       p_session_id: sessionId,
     });
     if (error) throw error;

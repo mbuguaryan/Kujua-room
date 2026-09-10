@@ -52,8 +52,19 @@ To ship backend changes:
 ```bash
 cd frontend
 npm run link                  # once: supabase login, then link the project
-npm run functions:deploy
+npm run functions:deploy      # --use-api: bundles server-side, no Docker
 npm run functions:logs        # tail runtime errors
+```
+
+`--use-api` matters. The default bundler pulls a 1.1 GB edge-runtime image and
+runs Deno in a container; on a slow connection that is a 25-minute download
+before any code is checked, and it can hang at 0% CPU with no output.
+
+To typecheck the functions without deploying — much faster feedback:
+
+```bash
+cd backend/supabase/functions
+deno check --config deno.json rooms/index.ts sessions/index.ts host/index.ts invites/index.ts
 ```
 
 Function secrets live in the project, not in a file:
