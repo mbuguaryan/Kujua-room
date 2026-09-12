@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MicrophoneSetup } from "./MicrophoneSetup";
+import { BrandMark } from "./BrandMark";
 
 /** "mens-conference" -> "Mens Conference", used until the server sends the real name. */
 function humanizeSlug(slug: string) {
@@ -33,7 +34,7 @@ export function JoinScreen({
     <main className="join-screen">
       <section className="join-card" aria-labelledby="join-title">
         <div className="brand-center">
-          <div className="brand-mark">K</div>
+          <BrandMark className="lg" />
         </div>
         <h1 id="join-title">Kujua Room</h1>
         <p className="sub">
