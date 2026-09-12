@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomBootstrap, SessionNotes } from "@/types/room";
 import { ParticipantTile } from "./ParticipantTile";
 import { ParticipantsPanel } from "./ParticipantsPanel";
@@ -28,9 +28,15 @@ import { apiFetch } from "@/lib/api";
 export function RoomScreen({
   bootstrap,
   deviceId,
+  onClosed,
 }: {
   bootstrap: RoomBootstrap;
   deviceId?: string;
+  /** Fired once the room has been torn down, so the parent can stop rendering
+      it. Navigating alone does not unmount this screen: the room route is the
+      same route, so React keeps the mounted tree and the participant stays in
+      a session that has already ended. */
+  onClosed?: (reason: "left" | "ended") => void;
 }) {
   const [panel, setPanel] = useState<
     "participants" | "chat" | "notes" | "private" | null
@@ -93,6 +99,54 @@ export function RoomScreen({
       chat.clearPreview();
     }
   }, [chat, panel]);
+
+  /* Both the ending countdown and the realtime status change race to tear the
+     room down, and the host's own click is a third caller. Latch so the media
+     session is left once and /leave is posted once. */
+  const closedRef = useRef(false);
+  const onClosedRef = useRef(onClosed);
+  useEffect(() => {
+    onClosedRef.current = onClosed;
+  });
+  const mediaLeave = media.leave;
+
+  const closeRoom = useCallback(
+    async (reason: "left" | "ended") => {
+      if (closedRef.current) return;
+      closedRef.current = true;
+      clearRecoveryState();
+      try {
+        await mediaLeave();
+      } catch (cause) {
+        console.warn("Unable to disconnect live audio cleanly", cause);
+      }
+      await apiFetch(`/sessions/${bootstrap.session.id}/leave`, {
+        method: "POST",
+        keepalive: true,
+      }).catch(() => undefined);
+      // replace: the room URL carries the invite/host query, so a back step
+      // must not drop the participant straight back into an ended session.
+      navigate(`/r/${bootstrap.room.slug}`, { replace: true });
+      onClosedRef.current?.(reason);
+    },
+    [bootstrap.room.slug, bootstrap.session.id, mediaLeave, navigate],
+  );
+
+  const leave = useCallback(() => closeRoom("left"), [closeRoom]);
+
+  /* The realtime subscription below must not resubscribe on every render, and
+     closeRoom changes identity whenever the media hook returns a new object. */
+  const closeRoomRef = useRef(closeRoom);
+  useEffect(() => {
+    closeRoomRef.current = closeRoom;
+  });
+
+  const finishSession = useCallback(async () => {
+    await apiFetch(`/sessions/${bootstrap.session.id}/finalize`, {
+      method: "POST",
+    }).catch((cause) => console.warn("Unable to finalize the session", cause));
+    await closeRoom("ended");
+  }, [bootstrap.session.id, closeRoom]);
 
   useEffect(() => {
     if (!notice) return;
@@ -174,8 +228,14 @@ export function RoomScreen({
           table: "sessions",
           filter: `id=eq.${bootstrap.session.id}`,
         },
-        ({ new: row }) =>
-          setEndsAt(typeof row.ends_at === "string" ? row.ends_at : null),
+        ({ new: row }) => {
+          setEndsAt(typeof row.ends_at === "string" ? row.ends_at : null);
+          /* finalize flips the session to "ended". Whichever participant's
+             countdown got there first closes the room for everyone else, and
+             a late joiner lands on an ended session and leaves immediately. */
+          if (row.status === "ended" || row.status === "cancelled")
+            void closeRoomRef.current("ended");
+        },
       )
       .on(
         "postgres_changes",
@@ -257,16 +317,6 @@ export function RoomScreen({
       window.clearInterval(interval);
     };
   }, [bootstrap.session.id, canModerate, stageRevision]);
-
-  const leave = useCallback(async () => {
-    await media.leave();
-    await apiFetch(`/sessions/${bootstrap.session.id}/leave`, {
-      method: "POST",
-      keepalive: true,
-    });
-    clearRecoveryState();
-    navigate(`/r/${bootstrap.room.slug}`);
-  }, [bootstrap.room.slug, bootstrap.session.id, media, navigate]);
 
   const muteParticipant = useCallback(
     async (userId: string) => {
@@ -703,6 +753,7 @@ export function RoomScreen({
         <ChatPanel
           sessionId={bootstrap.session.id}
           userId={bootstrap.member.userId}
+          selfName={bootstrap.member.displayName}
           participants={media.participants}
           messages={chat.messages}
           onRefresh={chat.refresh}
@@ -838,9 +889,8 @@ export function RoomScreen({
 
       {notice ? (
         <div
-          className="toast visible"
+          className="toast visible room-toast"
           role="status"
-          style={{ bottom: "96px", zIndex: 50 }}
           onClick={() => setNotice("")}
         >
           {notice}
@@ -851,11 +901,7 @@ export function RoomScreen({
         <EndSessionOverlay
           endsAt={endsAt}
           notes={privateNotes.content}
-          onEnded={() =>
-            void apiFetch(`/sessions/${bootstrap.session.id}/finalize`, {
-              method: "POST",
-            }).finally(() => leave())
-          }
+          onEnded={() => void finishSession()}
         />
       ) : null}
     </main>

@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Participant, RoomMessage } from "@/types/room";
+import type { Participant, RoomMessage, RoomRole } from "@/types/room";
 import { apiFetch } from "@/lib/api";
+import { avatarColor, initials } from "./ParticipantTile";
+
+const timeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function sentAt(value: string) {
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? "" : timeFormat.format(at);
+}
 
 export function ChatPanel({
   sessionId,
@@ -8,12 +19,16 @@ export function ChatPanel({
   participants,
   messages,
   onRefresh,
+  selfName = "You",
 }: {
   sessionId: string;
   userId: string;
   participants: Participant[];
   messages: RoomMessage[];
   onRefresh: () => Promise<void>;
+  /** The viewer's own display name, so their messages carry a name in the
+      transcript rather than a bare "You" that reads as nobody in particular. */
+  selfName?: string;
 }) {
   const [text, setText] = useState("");
   const [recipient, setRecipient] = useState("");
@@ -36,6 +51,13 @@ export function ChatPanel({
       return true;
     });
   }, [participants, userId]);
+
+  const rolesById = useMemo(() => {
+    const roles = new Map<string, RoomRole>();
+    for (const participant of participants)
+      roles.set(participant.id, participant.role);
+    return roles;
+  }, [participants]);
 
   const visible = useMemo(() => {
     if (mode === "room")
@@ -164,24 +186,43 @@ export function ChatPanel({
 
       <div className="chat-messages" aria-live="polite">
         {visible.length ? (
-          visible.map((message) => (
-            <article
-              key={message.id}
-              className={
-                message.senderId === userId
-                  ? "chat-message mine"
-                  : "chat-message"
-              }
-            >
-              <div>
-                <strong>
-                  {message.senderId === userId ? "You" : message.senderName}
-                </strong>
-                {message.recipientId ? <span>Private</span> : null}
-              </div>
-              <p>{message.message}</p>
-            </article>
-          ))
+          visible.map((message) => {
+            const mine = message.senderId === userId;
+            const name =
+              (mine ? selfName : message.senderName)?.trim() || "Participant";
+            const role = rolesById.get(message.senderId);
+            const time = sentAt(message.createdAt);
+            return (
+              <article
+                key={message.id}
+                className={mine ? "chat-message mine" : "chat-message"}
+              >
+                <div className="chat-message-head">
+                  <span
+                    className="chat-avatar"
+                    style={{ background: avatarColor(name) }}
+                    aria-hidden="true"
+                  >
+                    {initials(name)}
+                  </span>
+                  <strong>
+                    {name}
+                    {mine ? " (you)" : ""}
+                  </strong>
+                  {role === "host" || role === "moderator" ? (
+                    <span className="chat-role">{role}</span>
+                  ) : null}
+                  {message.recipientId ? <span>Private</span> : null}
+                  {time ? (
+                    <time className="chat-time" dateTime={message.createdAt}>
+                      {time}
+                    </time>
+                  ) : null}
+                </div>
+                <p>{message.message}</p>
+              </article>
+            );
+          })
         ) : (
           <div className="chat-empty">
             <strong>

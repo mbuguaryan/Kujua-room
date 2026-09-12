@@ -21,6 +21,7 @@ export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = ""
   const [error, setError] = useState("");
   const [bootstrap, setBootstrap] = useState<RoomBootstrap>();
   const [deviceId, setDeviceId] = useState<string>();
+  const [closed, setClosed] = useState<"left" | "ended">();
 
   useEffect(() => {
     const recovery = readRecoveryState(slug);
@@ -61,6 +62,35 @@ export function RoomApp({ slug, inviteToken, hostEntry = false, initialName = ""
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to join the room."); setState("failed"); }
   }
 
-  if (bootstrap) return <RoomScreen bootstrap={bootstrap} deviceId={deviceId} />;
+  if (closed)
+    return (
+      <main className="center-state">
+        <h1>{closed === "ended" ? "The session has ended" : "You left the room"}</h1>
+        <p className="sub">
+          {closed === "ended"
+            ? "The host ended this session for everyone. Thanks for joining."
+            : "You can rejoin while the session is still live."}
+        </p>
+        <a className="btn secondary small" href={`/r/${slug}`}>
+          Back to the room
+        </a>
+      </main>
+    );
+
+  if (bootstrap)
+    return (
+      <RoomScreen
+        bootstrap={bootstrap}
+        deviceId={deviceId}
+        /* The room route does not change when the session closes, so React
+           keeps this tree mounted. Dropping the bootstrap here is what
+           actually takes the participant out of the room. */
+        onClosed={(reason) => {
+          setBootstrap(undefined);
+          setDeviceId(undefined);
+          setClosed(reason);
+        }}
+      />
+    );
   return <><JoinScreen roomSlug={slug} inviteValid={Boolean(inviteToken) || hostEntry || Boolean(initialName)} initialName={initialName} loading={!(["idle", "failed"] as JoinState[]).includes(state)} message={labels[state]} onJoin={join} />{error ? <div className="toast visible" role="alert">{error}</div> : null}</>;
 }
