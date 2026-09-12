@@ -9,19 +9,23 @@
 }
 
 /* Kujua Room's palette, exposed to Tailwind utilities so new components and the
-   existing stylesheets share one source of truth. */
+   existing stylesheets share one source of truth. These mirror the semantic
+   tokens in globals.css — change a colour there and change it here. */
 @theme {
-  --color-ink: #1c1f1e;
-  --color-ink2: #262a28;
-  --color-ink3: #2f3532;
-  --color-stone: #e8e3d9;
-  --color-dim: #9a9c93;
-  --color-line: #38403c;
-  --color-ember: #c1622d;
-  --color-ember2: #e07840;
-  --color-gold: #d4a537;
-  --color-go: #4caf50;
-  --color-danger: #c1442d;
+  --color-bg: #f9f8fc;
+  --color-surface: #ffffff;
+  --color-raised: #f2effb;
+  --color-line: #e6e2f0;
+  --color-text: #1e1b2e;
+  --color-dim: #63607a;
+  --color-accent: #6d4ae0;
+  --color-accent-deep: #5b21b6;
+  --color-accent-tint: #efeafe;
+  --color-info: #0d8378;
+  --color-note: #b01f92;
+  --color-warn: #b45309;
+  --color-ok: #15803d;
+  --color-danger: #c0342b;
 
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "IBM Plex Sans", system-ui, sans-serif;
@@ -33,6 +37,7 @@
 @import "../styles/globals.css";
 @import "../styles/host-access.css";
 @import "../styles/entry.css";
+@import "../styles/landing.css";
 @import "../styles/room.css";
 @import "../styles/mobile-chat.css";
 @import "../styles/host-dashboard.css";

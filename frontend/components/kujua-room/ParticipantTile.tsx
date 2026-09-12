@@ -3,15 +3,17 @@ import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type { Participant } from "@/types/room";
 import { isRemoteMicrophoneAvailable } from "@/lib/room/microphone-state";
 
+// Every entry clears 4.5:1 against the white lettering drawn on it, so an
+// avatar stays legible whichever name hashes onto it.
 const palette = [
-  "#C1622D",
-  "#8C4A2D",
-  "#5F4A2D",
-  "#3E5C76",
-  "#2D3E4F",
-  "#4A6B4A",
-  "#6B5A3D",
-  "#7A4A3D",
+  "#6D4AE0",
+  "#0D8378",
+  "#B01F92",
+  "#B45309",
+  "#15803D",
+  "#2563EB",
+  "#BE3455",
+  "#6D28D9",
 ];
 
 export function initials(name: string) {
