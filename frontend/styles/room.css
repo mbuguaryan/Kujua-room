@@ -1,0 +1,530 @@
+/* Room-screen refinements. Presentational only — no state logic was touched.
+   Loaded last, so equal-specificity rules win by source order. */
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+/* Was a two-column mono grid holding a label, a room name and two status
+   lines, which read as unstyled debug output in the top-left corner. */
+.call-header {
+  padding: 12px 20px;
+  gap: 20px;
+}
+.call-header > .room-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  grid-template-columns: none;
+  font: inherit;
+}
+.room-name {
+  font: 600 16px var(--font-serif), serif;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.room-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font: 500 11px var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.room-status[data-state="connected"] {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 32%, transparent);
+}
+.room-status[data-state="reconnecting"],
+.room-status[data-state="connecting"] {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+.room-status[data-state="connection-lost"],
+.room-status[data-state="failed"] {
+  color: var(--danger-deep);
+  border-color: color-mix(in srgb, var(--danger) 38%, transparent);
+}
+.call-header .status-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+}
+.room-status[data-state="connected"] .status-dot {
+  animation: room-pulse 2.4s ease-in-out infinite;
+}
+@keyframes room-pulse {
+  50% { opacity: 0.4; }
+}
+
+/* ── Header nav ────────────────────────────────────────────────────────── */
+/* Tailwind's preflight sets `svg { display: block }`, so the icon in each of
+   these buttons became its own line and the labels dropped underneath — four
+   two-line stacks, each icon knocked 6px off centre by the margin the inline
+   layout used to need. Making the buttons flex containers restores the
+   intended icon-then-label row and lets a gap own the spacing. Grouping the
+   four into one segmented control then says they are a set, and which panel
+   is currently open. */
+.call-header nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+}
+.call-header nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+.call-header nav button svg {
+  width: 16px;
+  height: 16px;
+  margin-right: 0 !important;
+}
+.call-header nav button:hover:not(.active) {
+  background: var(--raised);
+  color: var(--text);
+}
+.call-header nav button.active {
+  background: var(--accent-tint);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+/* Inside a segmented control a floating badge would hang over the group's
+   rounded edge, so the unread count rides inline as a chip on the label. */
+.call-header nav .chat-unread-badge {
+  position: static;
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-right: -3px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  /* White clears AA on the violet (5.67:1); it never did on the old ember. */
+  color: var(--on-accent);
+  font: 700 10px var(--font-sans), sans-serif;
+  box-shadow: none;
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────────── */
+/* Tiles used to stretch across the full row and pin to the top-left, so a
+   two-person call looked like a mistake. Cap the tile width and centre. */
+.audio-grid {
+  grid-template-columns: repeat(auto-fit, minmax(158px, 190px));
+  justify-content: center;
+  align-content: center;
+  gap: 14px;
+}
+.audio-tile {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.audio-tile.speaking {
+  transform: translateY(-2px);
+}
+
+/* The host star and raised-hand badges sat at a flat 12px inset, which on a
+   16px-radius tile pushes them into the curve — the star looked stuck to the
+   corner rather than placed in it. Inset past the radius and shrink the disc
+   so it reads as a badge on the tile, not a sticker on its edge. */
+.tile-badges {
+  inset: 10px 10px auto;
+  pointer-events: none;
+}
+.tile-badges span {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+}
+/* A lone badge should keep its own corner instead of being stretched across
+   the row by space-between: hand on the left, host star on the right. */
+.tile-badges > span:only-child[aria-label="Host"] {
+  margin-left: auto;
+}
+
+/* ── Toolbar ───────────────────────────────────────────────────────────── */
+/* Two problems, both about hierarchy. The bar was a seven-column grid that
+   left dead gaps for whichever buttons a role does not render; and the muted
+   microphone, Leave and End-for-all were all filled with the same --danger,
+   so three buttons shouted equally and nothing marked the irreversible one.
+   Centred flex adapts to the buttons actually present, and the palette now
+   carries the meaning: neutral for everyday controls, a soft red tint for
+   "you are muted", one saturated fill on the single destructive action. */
+
+/* A floating dock rather than a full-bleed band: the old bar drew a border-top
+   across only its 760px, which read as an unfinished edge. */
+.controls:has(> button[aria-label="Mute or unmute microphone"]) {
+  position: sticky;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 20;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: min(760px, calc(100% - 24px));
+  margin: 10px auto max(16px, env(safe-area-inset-bottom));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-blur);
+  backdrop-filter: blur(16px);
+  /* The inset highlight is what lifts a translucent surface off the stage
+     behind it; on a light ground that reads as a crisp top edge. */
+  box-shadow: var(--shadow-dock);
+}
+
+.controls:has(> button[aria-label="Mute or unmute microphone"]) > .control {
+  grid-column: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 46px;
+  padding-inline: 16px;
+  border-radius: 999px;
+  border-color: var(--line);
+  background: var(--raised);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease,
+    color 0.16s ease, transform 0.12s ease;
+}
+/* The icons carry an inline margin from the shared ToolbarIcon; the flex gap
+   owns the spacing here, so it has to be cleared at the same weight. */
+.controls:has(> button[aria-label="Mute or unmute microphone"]) > .control svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 0 !important;
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > .control:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--accent-tint);
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > .control:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > .control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The microphone is the anchor: round, larger, and a step brighter than the
+   pills so the eye lands on it first. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Mute or unmute microphone"] {
+  flex: none;
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  padding: 0;
+  margin-inline: 4px;
+  border-radius: 50%;
+  border-color: var(--line-strong);
+  background: var(--accent-tint);
+  font-size: 0;
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Mute or unmute microphone"] svg {
+  width: 21px;
+  height: 21px;
+}
+/* Muted, and free to unmute: unmistakable without borrowing the destructive
+   red that End-for-all needs to keep for itself. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Mute or unmute microphone"][data-locked="false"][aria-pressed="true"] {
+  border-color: var(--danger-line);
+  background: var(--danger-tint-strong);
+  color: var(--danger-deep);
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Mute or unmute microphone"][data-locked="false"][aria-pressed="true"]:hover {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+/* Locked until the host approves — dashed and dimmed, never a live control. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Mute or unmute microphone"][data-locked="true"] {
+  border: 1px dashed var(--line-strong);
+  background: var(--raised);
+  color: var(--dim);
+  cursor: help;
+}
+
+/* Waiting on the host is a pending state, and gold is what this app already
+   uses for waiting — the old red-brown read as an error. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > .hand-request-control[aria-pressed="true"] {
+  border-color: var(--warn);
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+/* Leaving is reversible, so it stays quiet and simply reads as an exit. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Leave room"] {
+  position: relative;
+  flex: none;
+  margin-left: 12px;
+  border-color: color-mix(in srgb, var(--danger) 22%, var(--line));
+  background: var(--danger-tint);
+  color: var(--danger-deep);
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Leave room"]:hover:not(:disabled) {
+  border-color: var(--danger-line);
+  background: var(--danger-tint-strong);
+  color: var(--danger-deep);
+}
+/* A hairline splits the everyday controls from the ones that end your call. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="Leave room"]::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 1px;
+  height: 24px;
+  translate: 0 -50%;
+  background: var(--line);
+}
+
+/* The one irreversible action, and the only saturated fill in the bar. */
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="End session for everyone"] {
+  flex: none;
+  border-color: transparent;
+  background: var(--danger);
+  color: var(--on-accent);
+}
+.controls:has(> button[aria-label="Mute or unmute microphone"])
+  > button[aria-label="End session for everyone"]:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--danger-deep);
+}
+
+/* The dock floats, so anything anchored to the bottom clears its full height
+   (12 + 56 + 12 padding, plus the 16px it sits above the viewport edge). */
+.room-toast,
+.chat-drawer,
+.chat-minimized,
+.unmute-request-card {
+  bottom: 108px;
+}
+.room-toast {
+  z-index: 50;
+}
+
+/* ── Ended / left states ───────────────────────────────────────────────── */
+/* .center-state is a centred grid, so an anchor styled as a button stretches
+   to the widest sibling and keeps the default link underline. */
+.center-state .btn {
+  justify-self: center;
+  text-decoration: none;
+}
+.center-state .sub {
+  margin-bottom: 0;
+}
+
+/* ── Chat drawer sizing ────────────────────────────────────────────────── */
+/* globals.css sizes the drawer with `grid-template-rows: auto auto auto 1fr
+   auto`, which assumes five children. The recipient picker only renders in
+   Private mode, so Room mode has four — the 1fr slid onto .chat-compose and
+   blew the input and Send button up to fill the drawer while the transcript
+   collapsed. Flex puts the flexible row on the transcript by name, whichever
+   optional rows are present. */
+.chat-drawer,
+.chat-drawer.expanded {
+  display: flex;
+  flex-direction: column;
+}
+.chat-drawer > * {
+  flex: none;
+}
+.chat-drawer .chat-messages {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Chat attribution ──────────────────────────────────────────────────── */
+/* Every message carries who sent it: a coloured initial, the display name,
+   a role tag for host/moderator and the time it was sent. */
+.chat-message-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 3px;
+}
+/* globals.css styles the meta spans in a message head with `.chat-message>div
+   span`, which outweighs a single class and repainted the avatar initials in
+   the accent colour — accent on a saturated avatar is about 1.2:1. Two classes
+   take the specificity back. */
+.chat-message .chat-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--on-accent);
+  font: 700 9px var(--font-sans), sans-serif;
+  letter-spacing: 0.02em;
+}
+.chat-message-head strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-message.mine .chat-message-head strong {
+  color: var(--accent);
+}
+.chat-role {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--warn-tint);
+  color: var(--warn) !important;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chat-time {
+  margin-left: auto;
+  flex: none;
+  color: var(--dim);
+  font: 500 10px var(--font-mono), monospace;
+}
+/* The message body lines up under the name, not under the avatar. */
+.chat-message p {
+  padding-left: 29px;
+}
+
+/* ── Panels ────────────────────────────────────────────────────────────── */
+.coaching-banner {
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 720px) {
+  .call-header { padding: 10px 12px; gap: 10px; }
+  .call-header > .room-identity { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .room-name { font-size: 14px; max-width: 42vw; }
+  .room-status { padding: 3px 9px 3px 7px; font-size: 10px; }
+  .call-header nav { gap: 1px; padding: 3px; }
+  .call-header nav button { height: 34px; padding: 0 11px; font-size: 12px; gap: 6px; }
+}
+
+@media (max-width: 640px) {
+  /* globals.css collapsed the labels with `font-size: 0` and then printed the
+     first letter back at 13px, so the row read "C P A N". Show the icon and
+     nothing else, and let the tooltip and aria-label carry the name. */
+  .call-header nav button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+    justify-content: center;
+  }
+  .call-header nav button::first-letter { font-size: 0; }
+  .call-header nav button svg { width: 18px; height: 18px; }
+  /* An icon-only tab has no room for a count, so it reverts to a corner dot. */
+  .call-header nav .chat-unread-badge {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    min-width: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0 4px;
+    border: 2px solid var(--bg);
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 640px) {
+  .audio-grid { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }
+  .controls:has(> button[aria-label="Mute or unmute microphone"]) {
+    gap: 6px;
+    padding: 9px;
+    max-width: calc(100% - 16px);
+    bottom: max(10px, env(safe-area-inset-bottom));
+    margin-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  /* Labels go; the icons have to hold a tap target on their own. */
+  .controls:has(> button[aria-label="Mute or unmute microphone"]) > .control {
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+  .controls:has(> button[aria-label="Mute or unmute microphone"])
+    > button[aria-label="Mute or unmute microphone"] {
+    width: 52px;
+    min-width: 52px;
+    height: 52px;
+    margin-inline: 2px;
+  }
+  .controls:has(> button[aria-label="Mute or unmute microphone"])
+    > button[aria-label="Leave room"] {
+    margin-left: 8px;
+  }
+  .controls:has(> button[aria-label="Mute or unmute microphone"])
+    > button[aria-label="Leave room"]::before {
+    left: -8px;
+    height: 20px;
+  }
+  .room-toast,
+  .chat-minimized,
+  .unmute-request-card {
+    bottom: 88px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-status[data-state="connected"] .status-dot { animation: none; }
+  .audio-tile.speaking { transform: none; }
+  .controls:has(> button[aria-label="Mute or unmute microphone"])
+    > .control:active:not(:disabled) { transform: none; }
+}

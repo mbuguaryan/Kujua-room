@@ -1,0 +1,94 @@
+export type RoomRole = "host" | "moderator" | "speaker" | "audience";
+export type SessionStatus = "scheduled" | "live" | "ended" | "cancelled";
+export type ConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "connection-lost"
+  | "failed";
+export type JoinState =
+  | "idle"
+  | "validating-invite"
+  | "authenticating"
+  | "requesting-microphone"
+  | "testing-microphone"
+  | "joining-room"
+  | "requesting-media-token"
+  | "connecting-media"
+  | "connected"
+  | "reconnecting"
+  | "failed"
+  | "ended";
+
+export type RealtimeKitStageStatus =
+  | "ON_STAGE"
+  | "OFF_STAGE"
+  | "REQUESTED_TO_JOIN_STAGE"
+  | "ACCEPTED_TO_JOIN_STAGE"
+  | "UNKNOWN";
+
+export type Participant = {
+  id: string;
+  providerPeerId?: string;
+  providerUserId?: string;
+  name: string;
+  role: RoomRole;
+  currentRole?: RoomRole;
+  stageStatus?: RealtimeKitStageStatus;
+  canUnmute?: boolean;
+  hostMuted?: boolean;
+  muted: boolean;
+  handRaised: boolean;
+  speaking: boolean;
+  local?: boolean;
+};
+
+export type SessionNotes = {
+  title: string;
+  body: string;
+  points: string[];
+  updatedAt?: string;
+  sessionTitle?: string;
+  agenda?: string | null;
+  goals?: string | null;
+};
+export type LiveRoomSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  sessionId: string;
+  title: string;
+  startedAt: string | null;
+};
+export type RoomMessage = {
+  id: string;
+  sessionId: string;
+  roomId: string;
+  senderId: string;
+  recipientId: string | null;
+  senderName: string;
+  message: string;
+  messageType: "text";
+  createdAt: string;
+};
+export type RoomBootstrap = {
+  room: {
+    id: string;
+    slug: string;
+    name: string;
+    capacity: number;
+    stageCapacity: number;
+  };
+  session: {
+    id: string;
+    title: string;
+    agenda: string | null;
+    goals: string | null;
+    status: SessionStatus;
+    endsAt: string | null;
+  };
+  member: { userId: string; role: RoomRole; displayName: string };
+  notes: SessionNotes;
+  recovered?: boolean;
+};

@@ -1,0 +1,13 @@
+{
+  "name": "Kujua Room",
+  "short_name": "Kujua",
+  "description": "Voice-only coaching rooms",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f9f8fc",
+  "theme_color": "#f9f8fc",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
