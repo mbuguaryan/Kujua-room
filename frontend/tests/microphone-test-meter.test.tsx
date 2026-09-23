@@ -64,7 +64,10 @@ beforeEach(() => {
           target[0] = 128 + amplitude;
         },
       });
-      createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+      createMediaStreamSource = () => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      });
     },
   );
 
@@ -181,4 +184,68 @@ describe("microphone test meter", () => {
     await act(async () => drawFrames(12));
     expect(screen.getByText("Your microphone is working.")).toBeInTheDocument();
   });
+});
+
+it.each(["stop", "unmount"])(
+  "releases a late permission result after %s",
+  async (action) => {
+    let resolveStream!: (stream: MediaStream) => void;
+    navigator.mediaDevices.getUserMedia = vi.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolveStream = resolve;
+        }),
+    );
+    const view = render(<MicrophoneSetup onDeviceChange={() => {}} />);
+    await act(async () =>
+      screen.getByRole("button", { name: /test microphone/i }).click(),
+    );
+    await act(async () => {
+      if (action === "stop")
+        screen.getByRole("button", { name: /stop test/i }).click();
+      else view.unmount();
+    });
+    await act(async () =>
+      resolveStream({
+        getTracks: () => [{ stop: () => (stopped += 1) }],
+      } as unknown as MediaStream),
+    );
+    expect(stopped).toBe(1);
+    expect(closed).toBe(1);
+    expect(frames).toHaveLength(0);
+    expect(screen.queryByText(/Listening/)).toBeNull();
+  },
+);
+
+it.each([
+  ["NotFoundError", /Microphone not found/],
+  ["OverconstrainedError", /Microphone not found/],
+  ["NotReadableError", /Microphone could not start/],
+])("explains %s without blaming permissions", async (name, message) => {
+  navigator.mediaDevices.getUserMedia = vi
+    .fn()
+    .mockRejectedValue(new DOMException("Failed", name));
+  await startTest();
+  expect(screen.getByText(message)).toBeInTheDocument();
+  expect(closed).toBe(1);
+});
+
+it("clears an old microphone confirmation when the selected device changes", async () => {
+  const view = render(
+    <MicrophoneSetup selectedDeviceId="first" onDeviceChange={() => {}} />,
+  );
+  await act(async () =>
+    screen.getByRole("button", { name: /test microphone/i }).click(),
+  );
+  amplitude = 90;
+  await act(async () => drawFrames(12));
+  expect(screen.getByText("Your microphone is working.")).toBeInTheDocument();
+  view.rerender(
+    <MicrophoneSetup selectedDeviceId="second" onDeviceChange={() => {}} />,
+  );
+  expect(stopped).toBe(1);
+  expect(screen.queryByText("Your microphone is working.")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: /test microphone/i }),
+  ).toBeInTheDocument();
 });

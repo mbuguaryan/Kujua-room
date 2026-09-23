@@ -1,15 +1,11 @@
 import type { Participant } from "@/types/room";
-import {
-  hasRemoteSpeakingAccess,
-  isRemoteMicrophoneAvailable,
-} from "@/lib/room/microphone-state";
+import { isRemoteMicrophoneAvailable } from "@/lib/room/microphone-state";
 
 type ParticipantsPanelProps = {
   participants: Participant[];
   canModerate: boolean;
   busyUserId?: string;
   onMute?: (userId: string) => void | Promise<void>;
-  onRevoke?: (userId: string) => void | Promise<void>;
 };
 
 export function ParticipantsPanel({
@@ -17,7 +13,6 @@ export function ParticipantsPanel({
   canModerate,
   busyUserId,
   onMute,
-  onRevoke,
 }: ParticipantsPanelProps) {
   return (
     <section className="panel-card participant-list">
@@ -26,10 +21,6 @@ export function ParticipantsPanel({
         <span>{participants.length}</span>
       </div>
       {participants.map((p) => {
-        const speakingAccessActive = hasRemoteSpeakingAccess({
-          currentRole: p.currentRole,
-          stageStatus: p.stageStatus,
-        });
         const microphoneControllable = isRemoteMicrophoneAvailable({
           role: p.role,
           stageStatus: p.stageStatus,
@@ -49,9 +40,7 @@ export function ParticipantsPanel({
                 <>
                   <button
                     disabled={
-                      busyUserId === p.id ||
-                      p.muted ||
-                      !microphoneControllable
+                      busyUserId === p.id || p.muted || !microphoneControllable
                     }
                     title={
                       microphoneControllable
@@ -59,23 +48,13 @@ export function ParticipantsPanel({
                         : "Microphone is locked until speaking access is active"
                     }
                     onClick={() =>
-                      void Promise.resolve(onMute?.(p.id)).catch(() => undefined)
+                      void Promise.resolve(onMute?.(p.id)).catch(
+                        () => undefined,
+                      )
                     }
                   >
                     Mute
                   </button>
-                  {speakingAccessActive ? (
-                    <button
-                      disabled={busyUserId === p.id}
-                      onClick={() =>
-                        void Promise.resolve(onRevoke?.(p.id)).catch(
-                          () => undefined,
-                        )
-                      }
-                    >
-                      Revoke speaker
-                    </button>
-                  ) : null}
                 </>
               ) : null}
             </div>

@@ -18,9 +18,11 @@ const stageRoute = readFileSync(
 );
 
 describe("microphone wiring", () => {
-  it("keeps microphone and hand actions separate", () => {
+  it("removes host approval from the microphone UI", () => {
     expect(roomScreen).toContain("toggleSelfMicrophone");
-    expect(roomScreen).toContain("toggleHand");
+    expect(roomScreen).not.toContain("toggleHand");
+    expect(roomScreen).not.toContain("StageRequestsPanel");
+    expect(roomScreen).toContain("const microphoneUnlocked = media.connected");
     expect(roomScreen).not.toContain("requestToSpeakFromMic");
   });
 

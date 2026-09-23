@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "vitest run tests/microphone-state.test.ts tests/microphone-wiring.test.ts",
+    "prebuild": "vitest run tests/microphone-state.test.ts tests/microphone-wiring.test.ts tests/open-microphone.test.tsx tests/open-audio-provider.test.ts",
     "build": "tsc --noEmit && vite build && node scripts/check-bundle-secrets.mjs",
     "preview": "vite preview",
     "lint": "eslint .",

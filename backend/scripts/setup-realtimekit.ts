@@ -32,7 +32,7 @@ async function main() {
   );
   if (missing.length) {
     console.error(
-      `Missing presets: ${missing.join(", ")}. Create them in the RealtimeKit dashboard with video/screenshare disabled; audience audio publishing NOT_ALLOWED, speaker audio ALLOWED, moderator/host moderation permissions enabled.`,
+      `Missing presets: ${missing.join(", ")}. Create them in the RealtimeKit dashboard with video/screenshare disabled; audio publishing ALLOWED and stage management disabled for every role, moderator/host moderation permissions enabled.`,
     );
     Deno.exit(1);
   }

@@ -7,6 +7,8 @@ type TestState =
   | "working"
   | "denied"
   | "unavailable"
+  | "missing"
+  | "busy"
   /** Test stopped, but it had already proved the microphone works. */
   | "confirmed";
 
@@ -59,22 +61,37 @@ export function MicrophoneSetup({
   const barsRef = useRef<(HTMLSpanElement | null)[]>([]);
   const stopRef = useRef<() => void>(() => {});
 
+  const resetBars = useCallback(() => {
+    for (const bar of barsRef.current)
+      if (bar) bar.style.transform = `scaleY(${RESTING_SCALE})`;
+  }, []);
+
   /** Releases the device and parks the bars. Leaves the state text alone, so
       test() can restart cleanly without flashing through "idle". */
   const release = useCallback(() => {
     stopRef.current();
     stopRef.current = () => {};
-    for (const bar of barsRef.current)
-      if (bar) bar.style.transform = `scaleY(${RESTING_SCALE})`;
+    resetBars();
     setAnnouncedLevel(0);
-  }, []);
+  }, [resetBars]);
 
   const stopTest = useCallback(() => {
     release();
     setState(everWorked ? "confirmed" : "idle");
   }, [everWorked, release]);
 
-  useEffect(() => () => stopRef.current(), []);
+  const [testedDeviceId, setTestedDeviceId] = useState(selectedDeviceId);
+  if (testedDeviceId !== selectedDeviceId) {
+    setTestedDeviceId(selectedDeviceId);
+    setEverWorked(false);
+    setState("idle");
+    setAnnouncedLevel(0);
+  }
+
+  useEffect(() => {
+    resetBars();
+    return () => stopRef.current();
+  }, [resetBars, selectedDeviceId]);
 
   const test = useCallback(async () => {
     release();
@@ -91,9 +108,26 @@ export function MicrophoneSetup({
        be born suspended and then refuse to resume, and because an analyser on
        a suspended context only ever reports silence, the meter would sit dead
        at zero with nothing to tell the user why. */
-    const context = new AudioContext();
+    let context: AudioContext;
+    try {
+      context = new AudioContext();
+    } catch {
+      setState("unavailable");
+      return;
+    }
+    let cancelled = false;
+    let stream: MediaStream | undefined;
+    let source: MediaStreamAudioSourceNode | undefined;
+    let frame = 0;
+    stopRef.current = () => {
+      if (cancelled) return;
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      source?.disconnect();
+      void context.close().catch(() => {});
+      stream?.getTracks().forEach((track) => track.stop());
+    };
 
-    let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: false,
@@ -101,11 +135,24 @@ export function MicrophoneSetup({
           ? { deviceId: { exact: selectedDeviceId } }
           : true,
       });
-    } catch {
-      // Blocked, dismissed, or the exact device vanished — all recoverable by
-      // fixing permission and pressing the button again.
-      void context.close().catch(() => {});
-      setState("denied");
+    } catch (cause) {
+      if (cancelled) return;
+      release();
+      const name =
+        cause instanceof Error || cause instanceof DOMException
+          ? cause.name
+          : "";
+      setState(
+        name === "NotFoundError" || name === "OverconstrainedError"
+          ? "missing"
+          : name === "NotReadableError" || name === "AbortError"
+            ? "busy"
+            : "denied",
+      );
+      return;
+    }
+    if (cancelled) {
+      stream.getTracks().forEach((track) => track.stop());
       return;
     }
 
@@ -115,72 +162,70 @@ export function MicrophoneSetup({
       const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
         (device) => device.kind === "audioinput",
       );
-      setDevices(inputs);
+      if (!cancelled) setDevices(inputs);
     } catch {
       // Labels are a nicety; the test itself still works without the list.
     }
 
-    if (context.state === "suspended") await context.resume().catch(() => {});
+    if (cancelled) return;
+    try {
+      if (context.state === "suspended") await context.resume();
+      if (cancelled) return;
 
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 1024;
-    const source = context.createMediaStreamSource(stream);
-    source.connect(analyser);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      source = context.createMediaStreamSource(stream);
+      source.connect(analyser);
 
-    const samples = new Uint8Array(analyser.fftSize);
-    let frame = 0;
-    let smoothed = 0;
-    let lastAnnounced = 0;
-    let running = true;
+      const samples = new Uint8Array(analyser.fftSize);
+      let smoothed = 0;
+      let lastAnnounced = 0;
 
-    const tick = (now: number) => {
-      if (!running) return;
-      frame = requestAnimationFrame(tick);
+      const tick = (now: number) => {
+        if (cancelled) return;
+        frame = requestAnimationFrame(tick);
 
-      analyser.getByteTimeDomainData(samples);
-      let peak = 0;
-      for (const sample of samples) {
-        const deviation = Math.abs(sample - 128);
-        if (deviation > peak) peak = deviation;
-      }
-      const target = Math.min(1, (peak / 128) * 2.4);
+        analyser.getByteTimeDomainData(samples);
+        let peak = 0;
+        for (const sample of samples) {
+          const deviation = Math.abs(sample - 128);
+          if (deviation > peak) peak = deviation;
+        }
+        const target = Math.min(1, (peak / 128) * 2.4);
 
-      /* Fast attack, slow release: the bars jump on a syllable and fall back
+        /* Fast attack, slow release: the bars jump on a syllable and fall back
          gently, which is what makes a meter look alive instead of jittery. */
-      smoothed += (target - smoothed) * (target > smoothed ? 0.5 : 0.12);
+        smoothed += (target - smoothed) * (target > smoothed ? 0.5 : 0.12);
 
-      const seconds = now / 1000;
-      for (let index = 0; index < BAR_COUNT; index += 1) {
-        const bar = barsRef.current[index];
-        if (!bar) continue;
-        const ripple = 0.78 + 0.22 * Math.sin(seconds * 7 + index * 0.7);
-        const scale =
-          RESTING_SCALE +
-          smoothed * BAR_WEIGHTS[index] * ripple * (1 - RESTING_SCALE);
-        bar.style.transform = `scaleY(${scale.toFixed(3)})`;
-      }
+        const seconds = now / 1000;
+        for (let index = 0; index < BAR_COUNT; index += 1) {
+          const bar = barsRef.current[index];
+          if (!bar) continue;
+          const ripple = 0.78 + 0.22 * Math.sin(seconds * 7 + index * 0.7);
+          const scale =
+            RESTING_SCALE +
+            smoothed * BAR_WEIGHTS[index] * ripple * (1 - RESTING_SCALE);
+          bar.style.transform = `scaleY(${scale.toFixed(3)})`;
+        }
 
-      if (target > SPEAKING_LEVEL) {
-        setState("working");
-        setEverWorked(true);
-      }
+        if (target > SPEAKING_LEVEL) {
+          setState("working");
+          setEverWorked(true);
+        }
 
-      // Throttled so the aria-live readout does not fire every frame.
-      if (now - lastAnnounced > 400) {
-        lastAnnounced = now;
-        setAnnouncedLevel(Math.round(smoothed * 100));
-      }
-    };
+        // Throttled so the aria-live readout does not fire every frame.
+        if (now - lastAnnounced > 400) {
+          lastAnnounced = now;
+          setAnnouncedLevel(Math.round(smoothed * 100));
+        }
+      };
 
-    frame = requestAnimationFrame(tick);
-
-    stopRef.current = () => {
-      running = false;
-      cancelAnimationFrame(frame);
-      source.disconnect();
-      void context.close().catch(() => {});
-      for (const track of stream.getTracks()) track.stop();
-    };
+      frame = requestAnimationFrame(tick);
+    } catch {
+      if (cancelled) return;
+      release();
+      setState("unavailable");
+    }
   }, [release, selectedDeviceId]);
 
   const testing =
@@ -193,6 +238,9 @@ export function MicrophoneSetup({
     working: "Your microphone is working.",
     denied: "Microphone blocked. Allow access in your browser, then try again.",
     unavailable: "This browser cannot open a microphone.",
+    missing:
+      "Microphone not found. Reconnect it or choose another microphone, then try again.",
+    busy: "Microphone could not start. Close other apps using it, then try again.",
     confirmed: "Your microphone is working.",
   }[state];
 
