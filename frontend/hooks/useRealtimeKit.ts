@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
+import { createAudioPlayback } from "@/lib/room/audio-playback";
 import type {
   ConnectionState,
   Participant,
@@ -126,6 +127,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
   useEffect(() => {
     if (!meeting) return;
     const audioElements = new Map<string, HTMLAudioElement>();
+    const playback = createAudioPlayback();
     const attachAudio = (participant: {
       id: string;
       audioEnabled: boolean;
@@ -156,11 +158,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
       const current = audio.srcObject as MediaStream | null;
       if (!current || current.getAudioTracks()[0]?.id !== track.id)
         audio.srcObject = new MediaStream([track]);
-      void audio
-        .play()
-        .catch((cause) =>
-          console.warn("RealtimeKit remote audio autoplay blocked", cause),
-        );
+      playback.play(audio);
     };
     const detachAudio = (participant: { id: string }) => {
       const audio = audioElements.get(participant.id);
@@ -198,6 +196,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
       meeting.participants.joined.off("participantJoined", onJoined);
       meeting.participants.joined.off("participantLeft", onLeft);
       meeting.participants.joined.off("audioUpdate", onAudio);
+      playback.dispose();
       for (const audio of audioElements.values()) {
         audio.pause();
         audio.srcObject = null;
@@ -313,7 +312,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
   }, [meeting, schedulePageRecovery, setStatus, sync]);
 
   const connect = useCallback(
-    async (authToken: string, deviceId?: string, startMuted = false) => {
+    async (authToken: string, deviceId?: string, _startMuted = false) => {
       if (connectingRef.current) return;
       const currentMeeting = meetingRef.current;
       if (currentMeeting?.self.roomJoined) {
@@ -342,7 +341,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
               stageStatus: role === "audience" ? "OFF_STAGE" : "ON_STAGE",
               canUnmute: true,
               hostMuted: false,
-              muted: role !== "host" || startMuted,
+              muted: true,
               handRaised: false,
               speaking: false,
               local: true,
@@ -356,7 +355,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
           await currentMeeting.leave().catch(() => undefined);
         const client = await initMeeting({
           authToken,
-          defaults: { audio: role === "host" && !startMuted, video: false },
+          defaults: { audio: false, video: false },
         });
         if (!client) throw new Error("Media initialization failed");
         meetingRef.current = client;
@@ -367,7 +366,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
         }
         await client.self.disableVideo();
         await client.join();
-        if (role !== "host" || startMuted) await client.self.disableAudio();
+        await client.self.disableAudio();
         setStageStatus(
           normalizeStageStatus(client.stage.status ?? client.self.stageStatus),
         );
@@ -462,7 +461,7 @@ export function useKujuaRealtimeKit(role: RoomRole, localName: string) {
     }
     if (!canEnableSelfAudio())
       throw new Error(
-        "Microphone is locked until the host approves speaking access.",
+        "Room audio permissions need updating. Rejoin the room after the audio settings are updated.",
       );
     await meeting.self.enableAudio();
     sync();

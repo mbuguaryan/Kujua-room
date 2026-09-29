@@ -55,13 +55,13 @@ describe("microphone state", () => {
     ).toBe(false);
   });
 
-  it("does not expose host microphone controls for an off-stage audience member", () => {
+  it("exposes microphone controls for audience members without stage approval", () => {
     expect(
       isRemoteMicrophoneAvailable({
         role: "audience",
         stageStatus: "OFF_STAGE",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isRemoteMicrophoneAvailable({
         role: "audience",
@@ -78,4 +78,15 @@ describe("microphone state", () => {
       }),
     ).toBe(true);
   });
+});
+
+it("lets an audience member unmute with provider audio permission without stage approval", () => {
+  expect(
+    isLocalMicrophoneUnlocked({
+      connected: true,
+      effectiveRole: "audience",
+      stageStatus: "OFF_STAGE",
+      canEnableSelfAudio: true,
+    }),
+  ).toBe(true);
 });

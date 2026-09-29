@@ -528,3 +528,60 @@
   .controls:has(> button[aria-label="Mute or unmute microphone"])
     > .control:active:not(:disabled) { transform: none; }
 }
+
+/* Room-wide reactions sit above the call controls, like the other call actions. */
+.room-reactions { position: relative; flex: 0 0 auto; }
+.controls .reaction-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px; padding: 0 16px; border-radius: 999px;
+  background: var(--raised); color: var(--text); border-color: var(--line);
+  font-size: 13px; font-weight: 600;
+}
+.controls .reaction-toggle svg { width: 18px; height: 18px; margin-right: 0 !important; }
+@media (max-width: 640px) {
+  .controls .reaction-toggle { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; }
+}
+.controls .reaction-toggle[aria-expanded="true"] {
+  background: var(--accent-tint); color: var(--accent); border-color: var(--accent);
+}
+.reaction-popover {
+  position: fixed; bottom: 106px; left: 50%; transform: translateX(-50%);
+  z-index: 60; width: max-content; max-width: calc(100vw - 24px); padding: 8px;
+  border: 1px solid var(--line-strong); border-radius: 24px;
+  background: var(--surface); box-shadow: var(--shadow-lg);
+}
+.reaction-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.reaction-picker button {
+  display: grid; place-items: center; width: 42px; height: 44px;
+  border: 0; border-radius: 50%; background: transparent; font-size: 25px;
+  cursor: pointer; transition: transform 120ms, background 120ms;
+}
+.reaction-picker button:hover { background: var(--raised); transform: translateY(-3px); }
+.reaction-picker button:disabled { opacity: .6; cursor: wait; }
+.reaction-popover p { margin: 8px; font-size: 12px; color: var(--danger); }
+.reaction-stream {
+  position: fixed; right: 24px; bottom: 180px; z-index: 55;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: none; max-height: 55vh; overflow: hidden;
+}
+.floating-reaction {
+  display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 8px;
+  border: 1px solid var(--line); border-radius: 30px;
+  color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm);
+  animation: room-reaction 4.5s ease-out both;
+}
+.floating-reaction span { font-size: 32px; }
+.floating-reaction b { font-size: 12px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes room-reaction {
+  0% { opacity: 0; transform: translateY(18px) scale(.8); }
+  12%, 80% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-18px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating-reaction { animation: none; }
+  .reaction-picker button { transition: none; }
+}
+@media (max-width: 600px) {
+  .reaction-popover { bottom: 150px; width: 300px; }
+  .reaction-stream { right: 12px; bottom: 265px; }
+}

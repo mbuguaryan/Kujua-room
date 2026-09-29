@@ -88,9 +88,41 @@ export class RealtimeKitApi {
     }[role];
   }
 
+  private async allowOpenAudio(presetName: string, presetId: string) {
+    const preset = await this.request<{
+      permissions: {
+        stage_enabled?: boolean;
+        media: { audio: { can_produce: string }; [key: string]: unknown };
+        [key: string]: unknown;
+      };
+    }>(`/presets/${presetId}`, { method: "GET" });
+    if (
+      preset.permissions.media.audio.can_produce !== "ALLOWED" ||
+      preset.permissions.stage_enabled !== false
+    ) {
+      await this.request<unknown>(`/presets/${presetId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          permissions: {
+            ...preset.permissions,
+            stage_enabled: false,
+            media: {
+              ...preset.permissions.media,
+              audio: {
+                ...preset.permissions.media.audio,
+                can_produce: "ALLOWED",
+              },
+            },
+          },
+        }),
+      });
+    }
+    return presetName;
+  }
+
   private async resolvePreset(role: RoomRole) {
     const configured = this.preset(role);
-    const presets = await this.request<Array<{ name?: string }>>(
+    const presets = await this.request<Array<{ id: string; name?: string }>>(
       "/presets?per_page=100",
       { method: "GET" },
     );
@@ -98,18 +130,42 @@ export class RealtimeKitApi {
       .map((item) => item.name)
       .filter((name): name is string => Boolean(name));
 
-    if (names.includes(configured)) return configured;
+    const configuredPreset = presets.find((item) => item.name === configured);
+    if (configuredPreset)
+      return this.allowOpenAudio(configured, configuredPreset.id);
 
     const patterns: Record<RoomRole, RegExp[]> = {
-      host: [/group[_-]?call[_-]?host/i, /webinar[_-]?host/i, /host/i, /admin/i, /presenter/i],
-      moderator: [/moderator/i, /group[_-]?call[_-]?host/i, /webinar[_-]?host/i, /host/i, /presenter/i],
+      host: [
+        /group[_-]?call[_-]?host/i,
+        /webinar[_-]?host/i,
+        /host/i,
+        /admin/i,
+        /presenter/i,
+      ],
+      moderator: [
+        /moderator/i,
+        /group[_-]?call[_-]?host/i,
+        /webinar[_-]?host/i,
+        /host/i,
+        /presenter/i,
+      ],
       speaker: [/speaker/i, /presenter/i, /group[_-]?call[_-]?host/i, /host/i],
-      audience: [/audience/i, /group[_-]?call[_-]?participant/i, /webinar[_-]?participant/i, /participant/i, /viewer/i],
+      audience: [
+        /audience/i,
+        /group[_-]?call[_-]?participant/i,
+        /webinar[_-]?participant/i,
+        /participant/i,
+        /viewer/i,
+      ],
     };
 
     for (const pattern of patterns[role]) {
       const match = names.find((name) => pattern.test(name));
-      if (match) return match;
+      if (match)
+        return this.allowOpenAudio(
+          match,
+          presets.find((item) => item.name === match)!.id,
+        );
     }
 
     throw new Error(

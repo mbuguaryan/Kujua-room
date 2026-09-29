@@ -1,4 +1,5 @@
 type ToolbarIconName =
+  | "smile"
   | "chat"
   | "users"
   | "agenda"
@@ -25,6 +26,15 @@ export function ToolbarIcon({ name }: { name: ToolbarIconName }) {
     focusable: false,
     style: { verticalAlign: "middle", marginRight: 6, flex: "0 0 auto" },
   };
+
+  if (name === "smile") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01" />
+      </svg>
+    );
+  }
 
   if (name === "chat") {
     return (

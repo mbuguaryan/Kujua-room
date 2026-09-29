@@ -5,10 +5,6 @@ import { ParticipantsPanel } from "./ParticipantsPanel";
 import { SessionNotesPanel } from "./SessionNotesPanel";
 import { PrivateNotesPanel } from "./PrivateNotesPanel";
 import { EndSessionOverlay } from "./EndSessionOverlay";
-import {
-  StageRequestsPanel,
-  type StageRequestItem,
-} from "./StageRequestsPanel";
 import { usePrivateNotes } from "@/hooks/usePrivateNotes";
 import { useKujuaRealtimeKit } from "@/hooks/useRealtimeKit";
 import { useVoiceActivityReporter } from "@/hooks/useVoiceActivityReporter";
@@ -17,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { ChatPanel } from "./ChatPanel";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { RoomReactions } from "./RoomReactions";
 import {
   clearRecoveryState,
   newClientInstanceId,
@@ -43,31 +40,19 @@ export function RoomScreen({
   >(null);
   const [notes, setNotes] = useState<SessionNotes>(bootstrap.notes);
   const [endsAt, setEndsAt] = useState(bootstrap.session.endsAt);
-  const [handPending, setHandPending] = useState(false);
-  const [handBusy, setHandBusy] = useState(false);
-  const [stageRequests, setStageRequests] = useState<StageRequestItem[]>([]);
-  const [stageBusyId, setStageBusyId] = useState<string>();
   const [inviteBusy, setInviteBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [moderationBusy, setModerationBusy] = useState<string>();
-  const [stageRevision, setStageRevision] = useState(0);
 
   const media = useKujuaRealtimeKit(
     bootstrap.member.role,
     bootstrap.member.displayName,
   );
   const selfAudioEnabled = Boolean(media.meeting?.self.audioEnabled);
-  const microphoneUnlocked = Boolean(
-    media.connected &&
-      (media.stageStatus === "ON_STAGE" ||
-        (bootstrap.member.role !== "audience" && media.canEnableSelfAudio())),
-  );
+  const microphoneUnlocked = media.connected;
+  const [microphoneBusy, setMicrophoneBusy] = useState(false);
   const canModerate =
     bootstrap.member.role === "host" || bootstrap.member.role === "moderator";
-  const canRaiseHand =
-    bootstrap.member.role === "audience" &&
-    media.stageStatus !== "ON_STAGE" &&
-    media.stageStatus !== "ACCEPTED_TO_JOIN_STAGE";
 
   useVoiceActivityReporter({
     sessionId: bootstrap.session.id,
@@ -77,9 +62,6 @@ export function RoomScreen({
   });
 
   const connectMedia = media.connect;
-  const grantStageAccess = media.grantStageAccess;
-  const denyStageAccess = media.denyStageAccess;
-  const removeStageAccess = media.removeStageAccess;
   const navigate = useNavigate();
   const privateNotes = usePrivateNotes(
     bootstrap.session.id,
@@ -255,68 +237,11 @@ export function RoomScreen({
           });
         },
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "stage_requests",
-          filter: `session_id=eq.${bootstrap.session.id}`,
-        },
-        () => setStageRevision((value) => value + 1),
-      )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
   }, [bootstrap.session.id]);
-
-  useEffect(() => {
-    if (canModerate) return;
-    if (media.stageStatus === "ACCEPTED_TO_JOIN_STAGE") {
-      setHandPending(false);
-      setNotice("Speaking access approved. RealtimeKit is moving you on stage.");
-      return;
-    }
-    if (media.stageStatus === "ON_STAGE") {
-      setHandPending(false);
-      setNotice("Speaking access active. Your microphone is ready to unmute.");
-    }
-  }, [canModerate, media.stageStatus]);
-
-  useEffect(() => {
-    let stopped = false;
-
-    const syncStage = async () => {
-      try {
-        const response = await apiFetch(
-          `/sessions/${bootstrap.session.id}/stage`,
-          { cache: "no-store" },
-        );
-        if (!response.ok || stopped) return;
-        const body = (await response.json()) as {
-          requests?: StageRequestItem[];
-          request?: { status?: string } | null;
-        };
-
-        if (canModerate) {
-          setStageRequests(body.requests ?? []);
-          return;
-        }
-
-        setHandPending(body.request?.status === "pending");
-      } catch (cause) {
-        if (!stopped) console.error("Unable to sync stage request", cause);
-      }
-    };
-
-    void syncStage();
-    const interval = window.setInterval(syncStage, 2500);
-    return () => {
-      stopped = true;
-      window.clearInterval(interval);
-    };
-  }, [bootstrap.session.id, canModerate, stageRevision]);
 
   const muteParticipant = useCallback(
     async (userId: string) => {
@@ -331,7 +256,9 @@ export function RoomScreen({
         setNotice("Participant muted.");
       } catch (cause) {
         setNotice(
-          cause instanceof Error ? cause.message : "Unable to mute participant.",
+          cause instanceof Error
+            ? cause.message
+            : "Unable to mute participant.",
         );
         throw cause;
       } finally {
@@ -345,14 +272,6 @@ export function RoomScreen({
     async (userId: string) => {
       const meeting = media.meeting;
       if (!meeting) throw new Error("Live audio is not connected.");
-      const model = media.participants.find((item) => item.id === userId);
-      const canReceiveUnmuteRequest = Boolean(
-        model &&
-          (model.stageStatus === "ON_STAGE" || model.role !== "audience"),
-      );
-      if (!canReceiveUnmuteRequest)
-        throw new Error("Approve speaking access before requesting unmute.");
-
       const participant = Array.from(meeting.participants.joined.values()).find(
         (item) => item.customParticipantId === userId || item.id === userId,
       );
@@ -366,26 +285,7 @@ export function RoomScreen({
       );
       setNotice("Unmute request sent to participant.");
     },
-    [media.meeting, media.participants],
-  );
-
-  const revokeSpeaker = useCallback(
-    async (userId: string) => {
-      setModerationBusy(userId);
-      try {
-        await removeStageAccess(userId);
-        setNotice("Speaking permission revoked. Microphone locked.");
-      } catch (cause) {
-        setNotice(
-          cause instanceof Error
-            ? cause.message
-            : "Unable to revoke speaking permission.",
-        );
-      } finally {
-        setModerationBusy(undefined);
-      }
-    },
-    [removeStageAccess],
+    [media.meeting],
   );
 
   const muteAll = useCallback(async () => {
@@ -397,7 +297,7 @@ export function RoomScreen({
       );
       if (!response.ok) throw new Error("Mute-all authorization failed.");
       await media.muteAll();
-      setNotice("All participants muted. Approved speakers may unmute themselves.");
+      setNotice("All participants muted. Everyone can unmute themselves.");
     } catch (cause) {
       setNotice(
         cause instanceof Error ? cause.message : "Unable to mute participants.",
@@ -407,76 +307,9 @@ export function RoomScreen({
     }
   }, [bootstrap.session.id, media]);
 
-  const toggleHand = useCallback(async () => {
-    if (handBusy || !canRaiseHand) return;
-    setHandBusy(true);
-    const action = handPending ? "cancel" : "raise";
-    try {
-      const response = await apiFetch(
-        `/sessions/${bootstrap.session.id}/stage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
-        },
-      );
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(body.error ?? "Unable to update your hand.");
-      }
-
-      if (action === "raise") {
-        try {
-          await media.requestStageAccess();
-        } catch (cause) {
-          await apiFetch(`/sessions/${bootstrap.session.id}/stage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "cancel" }),
-          }).catch(() => undefined);
-          throw cause;
-        }
-      } else {
-        await media.cancelStageAccessRequest().catch((cause) =>
-          console.warn("Unable to cancel provider stage request", cause),
-        );
-      }
-
-      setHandPending(action === "raise");
-      setNotice(
-        action === "raise"
-          ? "Hand raised. Waiting for host approval to speak."
-          : "Hand lowered. Speaking request cancelled.",
-      );
-    } catch (cause) {
-      setHandPending(false);
-      setNotice(
-        cause instanceof Error ? cause.message : "Unable to update your hand.",
-      );
-    } finally {
-      setHandBusy(false);
-    }
-  }, [
-    bootstrap.session.id,
-    canRaiseHand,
-    handBusy,
-    handPending,
-    media,
-  ]);
-
   const toggleSelfMicrophone = useCallback(async () => {
-    if (!microphoneUnlocked) {
-      if (media.stageStatus === "ACCEPTED_TO_JOIN_STAGE") {
-        setNotice("Speaking access is connecting. Microphone will unlock on stage.");
-      } else if (handPending) {
-        setNotice("Microphone locked. Your hand is raised; wait for host approval.");
-      } else {
-        setNotice("Microphone locked. Raise your hand to request speaking access.");
-      }
-      return;
-    }
+    if (!microphoneUnlocked || microphoneBusy) return;
+    setMicrophoneBusy(true);
     try {
       await media.toggleAudio();
     } catch (cause) {
@@ -485,74 +318,10 @@ export function RoomScreen({
           ? cause.message
           : "Unable to change microphone state.",
       );
+    } finally {
+      setMicrophoneBusy(false);
     }
-  }, [handPending, media, microphoneUnlocked]);
-
-  const resolveStage = useCallback(
-    async (requestId: string, action: "approve" | "decline") => {
-      setStageBusyId(requestId);
-      const request = stageRequests.find((item) => item.id === requestId);
-      if (!request) {
-        setNotice("That request is no longer available.");
-        setStageBusyId(undefined);
-        return;
-      }
-
-      let providerGranted = false;
-      try {
-        if (action === "approve") {
-          await grantStageAccess(request.userId);
-          providerGranted = true;
-        }
-
-        const response = await apiFetch(
-          `/sessions/${bootstrap.session.id}/stage`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, requestId }),
-          },
-        );
-        if (!response.ok) {
-          const body = (await response.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(body.error ?? "Unable to resolve stage request.");
-        }
-
-        if (action === "decline") {
-          await denyStageAccess(request.userId).catch(() => undefined);
-        }
-
-        setStageRequests((current) =>
-          current.filter((item) => item.id !== requestId),
-        );
-        setNotice(
-          action === "approve"
-            ? "Participant approved. RealtimeKit is moving them on stage."
-            : "Request declined.",
-        );
-      } catch (cause) {
-        if (providerGranted) {
-          await removeStageAccess(request.userId).catch(() => undefined);
-        }
-        setNotice(
-          cause instanceof Error
-            ? cause.message
-            : "Unable to resolve stage request.",
-        );
-      } finally {
-        setStageBusyId(undefined);
-      }
-    },
-    [
-      bootstrap.session.id,
-      denyStageAccess,
-      grantStageAccess,
-      removeStageAccess,
-      stageRequests,
-    ],
-  );
+  }, [media, microphoneBusy, microphoneUnlocked]);
 
   const createInvitation = useCallback(async () => {
     if (inviteBusy) return;
@@ -570,7 +339,10 @@ export function RoomScreen({
           maxUses: bootstrap.room.capacity,
         }),
       });
-      const body = (await response.json()) as { token?: string; error?: string };
+      const body = (await response.json()) as {
+        token?: string;
+        error?: string;
+      };
       if (!response.ok || !body.token)
         throw new Error(body.error ?? "Unable to create invitation.");
 
@@ -602,11 +374,10 @@ export function RoomScreen({
       const tag = (event.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (event.key.toLowerCase() === "m") void toggleSelfMicrophone();
-      if (event.key.toLowerCase() === "h" && canRaiseHand) void toggleHand();
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
-  }, [canRaiseHand, toggleHand, toggleSelfMicrophone]);
+  }, [toggleSelfMicrophone]);
 
   useEffect(() => {
     let lock: WakeLockSentinel | null = null;
@@ -681,7 +452,8 @@ export function RoomScreen({
               setPanel(panel === "participants" ? null : "participants")
             }
           >
-            <ToolbarIcon name="users" />People
+            <ToolbarIcon name="users" />
+            People
           </button>
           <button
             aria-label="Today’s notes"
@@ -689,7 +461,8 @@ export function RoomScreen({
             className={panel === "notes" ? "active" : ""}
             onClick={() => setPanel(panel === "notes" ? null : "notes")}
           >
-            <ToolbarIcon name="agenda" />Agenda
+            <ToolbarIcon name="agenda" />
+            Agenda
           </button>
           <button
             aria-label="My private notes"
@@ -697,7 +470,8 @@ export function RoomScreen({
             className={panel === "private" ? "active" : ""}
             onClick={() => setPanel(panel === "private" ? null : "private")}
           >
-            <ToolbarIcon name="notes" />Notes
+            <ToolbarIcon name="notes" />
+            Notes
           </button>
         </nav>
       </header>
@@ -713,8 +487,10 @@ export function RoomScreen({
           }}
         >
           <span>
-            {chat.latestIncoming.recipientId ? "Private message" : "New message"} ·{" "}
-            <strong>{chat.latestIncoming.senderName}</strong>
+            {chat.latestIncoming.recipientId
+              ? "Private message"
+              : "New message"}{" "}
+            · <strong>{chat.latestIncoming.senderName}</strong>
           </span>
           <b>{chat.latestIncoming.message}</b>
         </button>
@@ -731,22 +507,12 @@ export function RoomScreen({
         </a>
       </div>
 
-      {canModerate ? (
-        <StageRequestsPanel
-          requests={stageRequests}
-          busyId={stageBusyId}
-          onResolve={(requestId, action) =>
-            void resolveStage(requestId, action)
-          }
-        />
-      ) : null}
       {panel === "participants" ? (
         <ParticipantsPanel
           participants={media.participants}
           canModerate={canModerate}
           busyUserId={moderationBusy}
           onMute={(id) => void muteParticipant(id)}
-          onRevoke={(id) => void revokeSpeaker(id)}
         />
       ) : null}
       {panel === "chat" ? (
@@ -788,7 +554,8 @@ export function RoomScreen({
             setPanel(panel === "participants" ? null : "participants")
           }
         >
-          <ToolbarIcon name="users" />People
+          <ToolbarIcon name="users" />
+          People
         </button>
         {canModerate ? (
           <button
@@ -798,48 +565,31 @@ export function RoomScreen({
             disabled={Boolean(moderationBusy)}
             onClick={() => void muteAll()}
           >
-            <ToolbarIcon name="volume-x" />Mute All
-          </button>
-        ) : null}
-
-        {canRaiseHand ? (
-          <button
-            className="control hand-request-control"
-            aria-label={handPending ? "Lower hand" : "Raise hand to speak"}
-            title={handPending ? "Lower hand" : "Raise hand to speak"}
-            aria-pressed={handPending}
-            disabled={handBusy}
-            onClick={() => void toggleHand()}
-          >
-            <ToolbarIcon name="hand" />
-            {handPending ? "Lower" : "Ask"}
+            <ToolbarIcon name="volume-x" />
+            Mute All
           </button>
         ) : null}
 
         <button
-          className={`control${microphoneUnlocked ? "" : " locked-mic-control"}`}
+          className="control"
           aria-label="Mute or unmute microphone"
           title={
             microphoneUnlocked
               ? selfAudioEnabled
                 ? "Mute microphone"
                 : "Unmute microphone"
-              : media.stageStatus === "ACCEPTED_TO_JOIN_STAGE"
-                ? "Microphone connecting to stage"
-                : "Microphone locked until host approval"
+              : "Connecting audio…"
           }
-          aria-pressed={microphoneUnlocked ? !selfAudioEnabled : true}
-          aria-disabled={!microphoneUnlocked}
-          data-locked={microphoneUnlocked ? "false" : "true"}
+          aria-pressed={!selfAudioEnabled}
+          disabled={!microphoneUnlocked || microphoneBusy}
+          data-locked="false"
           onClick={() => void toggleSelfMicrophone()}
         >
           <ToolbarIcon name={selfAudioEnabled ? "mic" : "mic-off"} />
-          {microphoneUnlocked
-            ? selfAudioEnabled
-              ? "Mute"
-              : "Unmute"
-            : "Locked"}
+          {selfAudioEnabled ? "Mute" : "Unmute"}
         </button>
+
+        <RoomReactions meeting={media.meeting} connected={media.connected} />
 
         {bootstrap.member.role === "host" ? (
           <button
@@ -860,7 +610,8 @@ export function RoomScreen({
           title="Leave room"
           onClick={() => void leave()}
         >
-          <ToolbarIcon name="log-out" />Leave
+          <ToolbarIcon name="log-out" />
+          Leave
         </button>
 
         {bootstrap.member.role === "host" ? (
@@ -882,7 +633,8 @@ export function RoomScreen({
               }
             }}
           >
-            <ToolbarIcon name="power" />End for all
+            <ToolbarIcon name="power" />
+            End for all
           </button>
         ) : null}
       </footer>

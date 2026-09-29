@@ -6,9 +6,7 @@ export function isLocalMicrophoneUnlocked(input: {
   stageStatus: RealtimeKitStageStatus;
   canEnableSelfAudio: boolean;
 }) {
-  if (!input.connected) return false;
-  if (input.stageStatus === "ON_STAGE") return true;
-  return input.effectiveRole !== "audience" && input.canEnableSelfAudio;
+  return input.connected && input.canEnableSelfAudio;
 }
 
 export function canAudienceRaiseHand(input: {
@@ -26,7 +24,7 @@ export function isRemoteMicrophoneAvailable(input: {
   role: RoomRole;
   stageStatus?: RealtimeKitStageStatus;
 }) {
-  return input.role !== "audience" || input.stageStatus === "ON_STAGE";
+  return Boolean(input.role);
 }
 
 export function hasRemoteSpeakingAccess(input: {
