@@ -29,30 +29,21 @@ router.post("/provision", async (request) => {
     requireAcademyBridge(request);
     const input = provisionSchema.parse(await request.json());
     const admin = createAdminClient();
-    const { data: existing } = await table(admin, "academy_live_sessions")
-      .select("*").eq("academy_session_id", input.academySessionId).maybeSingle();
-    if (existing) {
-      if (existing.teacher_external_id !== input.teacherId || existing.cohort_external_id !== input.cohortId)
-        throw new HttpError(409, "Academy session mapping conflicts with the existing classroom");
-      return json(request, { data: existing });
-    }
     const slug = await academySlug(input.academySessionId);
-    const { data: room, error: roomError } = await admin.from("rooms").insert({
-      slug, name: input.title, room_type: "group", access_mode: "private",
-      description: "Kujua Point Academy classroom",
-    }).select("id,slug").single();
-    if (roomError) throw roomError;
-    const { data: session, error: sessionError } = await admin.from("sessions").insert({
-      room_id: room.id, title: input.title, status: "scheduled",
-      scheduled_at: input.scheduledAt,
-    }).select("id").single();
-    if (sessionError) throw sessionError;
-    const { data, error } = await table(admin, "academy_live_sessions").insert({
-      academy_session_id: input.academySessionId, external_session_id: input.externalSessionId ?? null,
-      teacher_external_id: input.teacherId, cohort_external_id: input.cohortId,
-      room_id: room.id, session_id: session.id,
-    }).select("*").single();
-    if (error) throw error;
+    const { data, error } = await (admin.rpc as any)("provision_academy_classroom", {
+      p_academy_session_id: input.academySessionId,
+      p_external_session_id: input.externalSessionId ?? null,
+      p_teacher_id: input.teacherId,
+      p_cohort_id: input.cohortId,
+      p_title: input.title,
+      p_scheduled_at: input.scheduledAt,
+      p_room_slug: slug,
+    });
+    if (error) {
+      if (error.message === "academy_session_mapping_conflict")
+        throw new HttpError(409, "Academy session mapping conflicts with the existing classroom");
+      throw error;
+    }
     return json(request, { data }, { status: 201 });
   } catch (error) { return apiError(request, error, "academy_provision_failed"); }
 });
@@ -119,13 +110,19 @@ router.post("/join-intent", async (request) => {
 
 router.post("/redeem", async (request) => {
   let createdUserId: string | undefined;
+  let claim: string | undefined;
   try {
     const input = redeemSchema.parse(await request.json());
     const admin = createAdminClient();
     const hash = await sha256(input.token);
+    claim = crypto.randomUUID();
+    const { data: claimed, error: claimError } = await (admin.rpc as any)("claim_academy_join_intent", {
+      p_token_hash: hash, p_claim: claim,
+    });
+    if (claimError || !claimed) throw new HttpError(401, "Join credential is invalid, expired, or already being redeemed");
     const { data: intent } = await table(admin, "academy_join_intents")
       .select("*,academy_live_sessions!inner(room_id,session_id,state,rooms!inner(slug))")
-      .eq("token_hash", hash).is("consumed_at", null).gt("expires_at", new Date().toISOString()).maybeSingle();
+      .eq("id", claimed.id).maybeSingle();
     if (!intent || intent.academy_live_sessions.state !== "live") throw new HttpError(401, "Join credential is invalid or expired");
     const identityId = crypto.randomUUID();
     const email = `academy-${identityId}@room.invalid`;
@@ -140,7 +137,7 @@ router.post("/redeem", async (request) => {
     if (auth.error || !auth.data.session) throw new Error("Room identity session could not be created");
     const now = new Date().toISOString();
     const { data: consumed } = await table(admin, "academy_join_intents").update({ consumed_at: now })
-      .eq("id", intent.id).is("consumed_at", null).select("id").maybeSingle();
+      .eq("id", intent.id).eq("redemption_claim", claim).is("consumed_at", null).select("id").maybeSingle();
     if (!consumed) throw new HttpError(401, "Join credential has already been used");
     await admin.from("profiles").upsert({ user_id: createdUserId, display_name: intent.display_name });
     await admin.from("room_members").upsert({
@@ -158,6 +155,8 @@ router.post("/redeem", async (request) => {
     } });
   } catch (error) {
     if (createdUserId) await createAdminClient().auth.admin.deleteUser(createdUserId).catch(() => undefined);
+    if (claim) await table(createAdminClient(), "academy_join_intents").update({ redemption_claim: null, redemption_claimed_at: null })
+      .eq("redemption_claim", claim).is("consumed_at", null);
     return apiError(request, error, "academy_redeem_failed");
   }
 });
