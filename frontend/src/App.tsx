@@ -11,6 +11,7 @@ import { HostDashboard } from "@/components/kujua-room/HostDashboard";
 import { HostLogin } from "@/components/kujua-room/HostLogin";
 import { JoinEntry } from "@/components/kujua-room/JoinEntry";
 import { RoomApp } from "@/components/kujua-room/RoomApp";
+import { AcademyJoin } from "@/components/kujua-room/AcademyJoin";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { NotFound } from "./NotFound";
 
@@ -44,6 +45,7 @@ export function App() {
             <Route path="/join" element={<JoinEntry />} />
             <Route path="/host" element={<HostDashboard />} />
             <Route path="/host/login" element={<HostLogin />} />
+            <Route path="/academy/join" element={<AcademyJoin />} />
             <Route path="/r/:slug" element={<RoomRoute />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
