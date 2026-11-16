@@ -12,6 +12,8 @@ const schema = z.object({
   CLOUDFLARE_RTK_SPEAKER_PRESET: z.string().default("speaker"),
   CLOUDFLARE_RTK_AUDIENCE_PRESET: z.string().default("audience"),
   MEDIA_ADAPTER: z.enum(["realtimekit", "mock"]).default("realtimekit"),
+  ACADEMY_BRIDGE_SECRET: z.string().min(32).optional(),
+  ROOM_PUBLIC_URL: z.string().url().optional(),
 });
 
 /**
@@ -34,4 +36,6 @@ export const serverEnv = () =>
     CLOUDFLARE_RTK_SPEAKER_PRESET: Deno.env.get("CLOUDFLARE_RTK_SPEAKER_PRESET"),
     CLOUDFLARE_RTK_AUDIENCE_PRESET: Deno.env.get("CLOUDFLARE_RTK_AUDIENCE_PRESET"),
     MEDIA_ADAPTER: Deno.env.get("MEDIA_ADAPTER"),
+    ACADEMY_BRIDGE_SECRET: Deno.env.get("ACADEMY_BRIDGE_SECRET"),
+    ROOM_PUBLIC_URL: Deno.env.get("ROOM_PUBLIC_URL"),
   });

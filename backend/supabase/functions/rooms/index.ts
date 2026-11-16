@@ -143,6 +143,27 @@ router.post("/join", async (request) => {
     await rateLimit("room-join-user", user.id, 10, 300);
 
     if (!body.inviteToken) {
+      if (user) {
+        const { data: academyRoom } = await admin
+          .from("rooms").select("id,name,access_mode")
+          .eq("slug", body.slug).eq("status", "active").maybeSingle();
+        if (academyRoom) {
+          const { data: existingMember } = await admin.from("room_members")
+            .select("role,status").eq("room_id", academyRoom.id)
+            .eq("user_id", user.id).maybeSingle();
+          if (existingMember?.status === "active") {
+            await admin.from("profiles").upsert({ user_id: user.id, display_name: body.displayName });
+            const { data: session } = await admin.from("sessions").select("id,status")
+              .eq("room_id", academyRoom.id).eq("status", "live").maybeSingle();
+            if (!session) return json(request, { error: "No live session in this room." }, { status: 409 });
+            return json(request, { data: {
+              room_id: academyRoom.id, room_name: academyRoom.name,
+              role: existingMember.role, session_id: session.id,
+              session_status: session.status, access_mode: academyRoom.access_mode,
+            } });
+          }
+        }
+      }
       const { data: publicRoom } = await admin
         .from("rooms")
         .select("id,name,access_mode")

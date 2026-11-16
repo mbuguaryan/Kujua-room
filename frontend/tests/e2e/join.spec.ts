@@ -36,7 +36,7 @@ test("invited join screen is accessible", async ({ page }) => {
 test("host login hydrates and submits through fetch", async ({ page }) => {
   const errors = hydrationErrors(page);
   let loginStatus: number | undefined;
-  await page.route("**/api/auth/host-login", async (route) => {
+  await page.route("**/functions/v1/host/login", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     loginStatus = 401;
     await route.fulfill({

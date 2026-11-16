@@ -235,6 +235,10 @@ router.post("/:sessionId/join", async (request, { sessionId }) => {
         joined_at: now, left_at: null, last_seen_at: now,
       });
     }
+    await (admin.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<unknown>)(
+      "record_academy_participation",
+      { p_room_user_id: user.id, p_event: "join", p_occurred_at: now },
+    );
     return json(request, { ok: true, role: existing?.current_role ?? member.role });
   } catch (error) {
     return apiError(request, error, "session_join_failed");
@@ -249,6 +253,10 @@ router.post("/:sessionId/leave", async (request, { sessionId }) => {
     await admin.from("session_participants")
       .update({ left_at: now, last_seen_at: now })
       .eq("session_id", sessionId).eq("user_id", user.id);
+    await (admin.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<unknown>)(
+      "record_academy_participation",
+      { p_room_user_id: user.id, p_event: "leave", p_occurred_at: now },
+    );
     return json(request, { ok: true });
   } catch (error) {
     return apiError(request, error, "session_leave_failed");

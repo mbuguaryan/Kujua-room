@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "functions:deploy": "supabase functions deploy rooms sessions host invites --use-api --workdir ../backend",
+    "functions:deploy": "supabase functions deploy rooms sessions host invites academy-bridge --use-api --workdir ../backend",
     "bootstrap:host": "deno run --config ../backend/deno.json --allow-net --allow-env --env-file=../backend/.env.local ../backend/scripts/bootstrap-host.ts",
     "setup:realtimekit": "deno run --config ../backend/deno.json --allow-net --allow-env --env-file=../backend/.env.local ../backend/scripts/setup-realtimekit.ts",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
